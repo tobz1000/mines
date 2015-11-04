@@ -3,42 +3,47 @@ const underscore = require('underscore')
 const net = require('net')
 const jsonSocket = require('json-socket')
 
-const server = net.createServer()
-server.listen(1066)
-server.on('connection', soc => {
-	soc = new jsonSocket(soc)
-	soc.on('message', obj => {
-		newGame(obj.dims, obj.mines)
-		soc.sendEndMessage({status: "okay"})
-	})
-})
+function Game(dims, mines) {
 
-const newGame = (dims, mines) => {
-	var size = dims.reduce((x, y) => x * y)
-	if (size < mines) ; /* error? */
-	var mines_rem = mines;
+	this.finished = false
+	this.won = false
 
-	var gameArray = new Array(size).fill(false).fill(true, 0, mines)
-	gameArray = underscore.shuffle(gameArray)
+	this.checkCell = (coords) => {
+		boom = gameGrid.get.apply(this, arguments)
+		if (boom && firstTurn){
+			// Remove the mine if the user sets it off first turn
+			gameGrid.set.apply(this, arguments.concat(false))
+			do // And put it somewhere else
+				var newCellInd = Math.floor(Math.random() * gameArray.length)
+			while (gameArray[newCellInd] != false)
+			gameArray[newCellInd] = true
+			boom = false
+		}
+		if(boom) {
+			this.finished = true
+			return -1
+		} else {
+			
+		}
 
-	var gameGrid = new nd(gameArray, dims)
 
-	return gameGrid
-}
-
-const client = {
-	const newGame = () => {
-		const conn = new jsonSocket(new net.Socket())
-		conn.connect(1066)
-		conn.on('connect', () => {
-			conn.sendMessage({dims: [10, 10], mines: 30})
-			conn.on('message', obj => {
-				console.log("Status: " + obj.status)
-			})
-		})
+		firstTurn = false
+		return boom
 	}
+
+	const constr = () => {
+		const size = dims.reduce((x, y) => x * y)
+		mines = Math.min(mines, size)
+		var mines_rem = mines
+		var gameArray = new Array(size).fill(false).fill(true, 0, mines)
+		gameArray = underscore.shuffle(gameArray)
+		var gameGrid = new nd(gameArray, dims)
+		var firstTurn = true
+	}
+
+	constr()
 }
 
-server.listen(1066)
+g = new Game([5, 5], 5)
 
-module.exports = {newGame: client.newGame}
+module.exports = {Game: Game}
