@@ -3,13 +3,15 @@ const underscore = require('underscore')
 const net = require('net')
 const jsonSocket = require('json-socket')
 
-function Game(dims, mines) {
+var Game = function(dims, mines) {
 
-	this.finished = false
-	this.won = false
+	var finished = false
+	var won = false
 
-	this.checkCell = (coords) => {
+	checkCell : (coords) => {
+		var surrCount
 		boom = gameGrid.get.apply(this, arguments)
+
 		if (boom && firstTurn){
 			// Remove the mine if the user sets it off first turn
 			gameGrid.set.apply(this, arguments.concat(false))
@@ -20,28 +22,33 @@ function Game(dims, mines) {
 			boom = false
 		}
 		if(boom) {
-			this.finished = true
+			finished = true
 			return -1
-		} else {
-			
+		} else {a
+			// Grab a square/cube/hypercube of size 3 around the chosen cell.
+			surrCellsGrid = gameGrid.lo(coords.map(x => x - 1)).hi(
+					coords.map(x => 3))
 		}
 
-
 		firstTurn = false
-		return boom
+		return surrCount
+
+		// Recursive
+		const count_mines = (dims, pivot) => {
+			if (dims.length === 1) {/*...*/}
+			for (var i = -1; i <= 1; i++) {
+				count_mines(dims.slice(1))
+			}
+		}
 	}
 
-	const constr = () => {
-		const size = dims.reduce((x, y) => x * y)
-		mines = Math.min(mines, size)
-		var mines_rem = mines
-		var gameArray = new Array(size).fill(false).fill(true, 0, mines)
-		gameArray = underscore.shuffle(gameArray)
-		var gameGrid = new nd(gameArray, dims)
-		var firstTurn = true
-	}
-
-	constr()
+	const size = dims.reduce((x, y) => x * y)
+	mines = Math.min(mines, size)
+	var mines_rem = mines
+	var gameArray = new Array(size).fill(false).fill(true, 0, mines)
+	gameArray = underscore.shuffle(gameArray)
+	var gameGrid = new nd(gameArray, dims)
+	var firstTurn = true
 }
 
 g = new Game([5, 5], 5)
