@@ -4,6 +4,12 @@ const underscore = require('underscore');
 const nd = require('ndarray');
 
 http.createServer((req, resp) => {
+	// Set CORS headers- https://gist.github.com/balupton/3696140
+	resp.setHeader('Access-Control-Allow-Origin', '*');
+	resp.setHeader('Access-Control-Request-Method', '*');
+	resp.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, POST');
+	resp.setHeader('Access-Control-Allow-Headers', '*');
+
 	let body = "";
 	req.on('data', function (chunk) {
 		body += chunk;
