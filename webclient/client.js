@@ -1,7 +1,7 @@
 "use strict";
 const newGame = (dims, mines) => {
 	/* TODO: post not get */
-	$.post('http://localhost:1066', JSON.stringify({action:'newGame', dims:dims, mines:mines}), resp => {
+	$.post('http://localhost:1066/action', JSON.stringify({action:'newGame', dims:dims, mines:mines}), resp => {
 		if(resp.error)
 		{
 			console.log("error: " + resp.error);
