@@ -6,18 +6,25 @@ require('coffee-script/register');
 const ty = require('assert-type');
 
 const GAME_ID_LEN = 10;
+const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
 const TY_DIMS = ty.arr.of([ty.int.pos,ty.int.pos]);
+/* TODO: figure out a way to specify string length in assert object */
 const TY_ID = ty.str.ne;
 
-const server = express();
-
-const MinesError = function(error, info){
+const MinesError = function(error, info) {
 	this.error = error;
 	this.info = info;
 }
 
+const server = express();
+
+server.use(express.static(PUBLIC_HTML_DIR));
+
+/*	TODO: can't figure out how to process multiple requests at once!
+	Seems post requests are queued, and a new one isn't started until the
+	response for the last one is end()ed. */
 server.post('/action', (req, resp) => {
 	let body = "";
 	req.on('data', function (chunk) {
@@ -39,11 +46,10 @@ server.post('/action', (req, resp) => {
 				responseObj = { msg: "unknown error" };
 			}
 		}
-
+		/* TODO: Proper http response codes */
 		resp.end(JSON.stringify(responseObj));
 	});
 }).listen(1066);
-
 
 let games = {};
 
@@ -72,15 +78,15 @@ const handleRequest = req => {
 		},
 
 		clearCell : {
-			paramChecks : ty.obj.with({ id : TY_ID, dims : TY_DIMS }),
+			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_DIMS }),
 			func : () => {
 				game = getGame(req.id);
-				games.clearCell(req.dims);
+				game.clearCell(req.dims);
 			}
 		},
 
 		checkCell : {
-			paramChecks :ty.obj.with( { id : TY_ID, dims : TY_DIMS }),
+			paramChecks :ty.obj.with( { id : TY_ID, coords : TY_DIMS }),
 			func : () => {
 				game = getGame(req.id);
 				game.checkCell(req.dims);
@@ -97,7 +103,7 @@ const handleRequest = req => {
 
 		/* No action, just return current game state. */
 		gameState : {
-			paramChecks : { id : TY_ID },
+			paramChecks : ty.obj.with({ id : TY_ID }),
 			func : () => {
 				game = getGame(req.id);
 			}
@@ -144,13 +150,15 @@ const Game = function(id, dims, mines) {
 
 	if(mines % 1 !== 0 || mines < 1)
 		throw new MinesError("invalid number of mines specified (" + mines +
-			")");
+			")", { min_mines : 1, max_mines : size - 1 }
+		);
 
-	const size = dims[0]*dims[1];
-	if (mines > size)
-		throw new MinesError("more mines than cells!", {
-			requested_size: size,
-			requested_mines: mines
+	const size = dims.reduce((x, y) => x * y);
+	if (mines > size - 1)
+		throw new MinesError("too many mines!", {
+			requested_size : size,
+			max_mines : size -1,
+			requested_mines : mines,
 		});
 
 	let gameOver = false;
@@ -185,20 +193,63 @@ const Game = function(id, dims, mines) {
 	};
 
 	/* Representation of a cell in the grid. gets/sets gameGrid state. */
-	const Cell = function(dims) {
+	const Cell = function(coords) {
+		/* multi-dim version - broken. */
+		// const surrounding = () => {
+		// 	const iter = (baseCoords, modCoords, dim) => {
+		// 		if(dim === 0) {
+		// 			/* Don't count the central cell itself */
+		// 			if(baseCoords.every((dim) => { return dim === 0; }))
+		// 				return 0;
+
+		// 			let newCoords = baseCoords.map((base, i) => {
+		// 				return base + modCoords[i];
+		// 			});
+
+		// 			let state = gameGrid.get.apply(this, newCoords);
+		// 			return state === cellState.MINE ? 1 : 0;
+		// 		}
+
+		// 		let ret = 0;
+		// 		for(let i of [-1, 0, 1]) {
+		// 			modCoords[dim - 1] = i;
+		// 			ret += iter(baseCoords, modCoords, dim - 1);
+		// 		}
+
+		// 		return ret;
+		// 	};
+
+		// 	return iter(coords, [], coords.length);
+		// }
+
 		const surrounding = () => {
 			let surrCount = 0;
 			for (let i of [-1, 0, 1])
 				for (let j of [-1, 0, 1])
 					if((i !== 0 || j !== 0) && gameGrid.get(
-							[dims[0]+i],[dims[1]+j]) === cellState.MINE)
+							[coords[0]+i],[coords[1]+j]) === cellState.MINE)
 						surrCount++;
 			return surrCount;
 		};
+
+		/* multidim version */
+		//this.clear = () => {
+		//	/*	ndarray.get needs coords as individual args, plus our new value
+		//		on the end. So we have to duplicate coords and add the value
+		//		to the end. */
+		//	let args = coords.slice();
+		//	args.push(cellState.CLEARED);
+		//	gameGrid.set.apply(this, args);
+		//};
+
 		this.clear = () => {
 			gameGrid.set(dims[0], dims[1], cellState.CLEARED);
 		};
-		this.state = () => { return gameGrid.get(dims[0], dims[1]); };
+
+		/* multidim version */
+		//this.state = () => gameGrid.get.apply(this, coords);
+
+		this.state = () => { return gameGrid.get(coords[0], coords[1]); };
 
 		/* Information the player is allowed to know */
 		this.userCell = () => {
@@ -207,7 +258,7 @@ const Game = function(id, dims, mines) {
 				state = undefined;
 
 			return {
-				dims : dims,
+				coords : coords,
 				/* 'surrounding' not needed when the user can see everything */
 				surrounding : !gameOver ? surrounding() : undefined,
 				state : state
@@ -215,12 +266,12 @@ const Game = function(id, dims, mines) {
 		};
 	};
 
-	this.clearCell = dims => {
+	this.clearCell = coords => {
 		if(gameOver)
 			throw new MinesError("game over!");
 
 		/* Representation of a cell in the grid. gets/sets gameGrid state. */
-		let cell = new Cell(dims);
+		let cell = new Cell(coords);
 
 		if(cell.state() === cellState.MINE)
 			gameOver = true;
@@ -236,10 +287,8 @@ const Game = function(id, dims, mines) {
 		lastUserCell = cell.userCell();
 	}
 
-
-	/* TODO finish this, merge functionality with clearCell */
-	this.checkCell = dims => {
-		lastUserCell = new Cell(dims).userCell();
+	this.checkCell = coords => {
+		lastUserCell = new Cell(coords).userCell();
 	}
 
 	this.endGame = () => {
