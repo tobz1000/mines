@@ -4,6 +4,7 @@ let $gameArea, game;
 
 $(() => {
 	$gameArea = $("#gameArea");
+	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
 })
 
 const action = (req, respFn) => {
@@ -93,19 +94,24 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			}
 	}
 
-	const toggleFlag = (coords, flag) => {
+	const toggleFlag = (coords) => {
 		const FLAGGED_VAL = "f";
 		const flagged = gameGrid[coords[0]][coords[1]];
 		const $cell = $("#cell-" + coords[0] + "-" + coords[1]);
 
 		if(flagged !== FLAGGED_VAL && flagged !== null) {
-			console.error("Attempted to flag/unflag a revealed call at " +
+			console.error("Attempted to flag/unflag a revealed cell at " +
 					coords);
 			return;
 		}
 
 		gameGrid[coords[0]][coords[1]] = flagged ? null : FLAGGED_VAL;
 		$cell.toggleClass("cellUnknown cellFlagged");
+
+		if(flagged)
+			$cell.click(() => { clearCell(coords) });
+		else
+			$cell.off('click');
 	}
 
 	$gameArea.empty();
@@ -121,7 +127,6 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 					.attr('id', 'cell-' + i + '-' + j)
 					.click(() => { clearCell([i, j]) })
 					.on('contextmenu', (e) => {
-						e.preventDefault();
 						toggleFlag([i, j]);
 					})
 			);
