@@ -10,6 +10,7 @@ const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
 const TY_DIMS = ty.arr.of([ty.int.pos,ty.int.pos]);
+const TY_COORDS = ty.arr.of([ty.int.nonneg,ty.int.nonneg])
 /* TODO: figure out a way to specify string length in assert object */
 const TY_ID = ty.str.ne;
 
@@ -27,7 +28,7 @@ server.use(express.static(PUBLIC_HTML_DIR));
 	response for the last one is end()ed. */
 server.post('/action', (req, resp) => {
 	let body = "";
-	req.on('data', function (chunk) {
+	req.on('data', chunk => {
 		body += chunk;
 	});
 	req.on('end', () => {
@@ -35,15 +36,13 @@ server.post('/action', (req, resp) => {
 		try {
 			responseObj = handleRequest(JSON.parse(body));
 		} catch(e) {
-			let msg;
 			if(e instanceof SyntaxError)
 				responseObj = { error: "malformed JSON request data" };
 			else if (e instanceof MinesError)
 				responseObj = e;
-			else
-			{
-				console.log("Unhandled error: " + e.stack);
-				responseObj = { msg: "unknown error" };
+			else {
+				console.error("Unhandled error: " + e.stack);
+				responseObj = { error: "unknown error" };
 			}
 		}
 		/* TODO: Proper http response codes */
@@ -78,18 +77,18 @@ const handleRequest = req => {
 		},
 
 		clearCell : {
-			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_DIMS }),
+			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_COORDS }),
 			func : () => {
 				game = getGame(req.id);
-				game.clearCell(req.dims);
+				game.clearCell(req.coords);
 			}
 		},
 
 		checkCell : {
-			paramChecks :ty.obj.with( { id : TY_ID, coords : TY_DIMS }),
+			paramChecks :ty.obj.with( { id : TY_ID, coords : TY_COORDS }),
 			func : () => {
 				game = getGame(req.id);
-				game.checkCell(req.dims);
+				game.checkCell(req.coords);
 			}
 		},
 
@@ -129,7 +128,8 @@ const handleRequest = req => {
 	} catch(e) {
 		if(e instanceof ty.TypeAssertionError) {
 			throw new MinesError(
-				"invalid parameters supplied for action (" + actionName + ")", {
+				"invalid parameters supplied for action \"" + actionName + "\"",
+				{
 					required_params : ty.Describe(gameAction.paramChecks),
 					supplied_params : req
 				}
@@ -143,21 +143,24 @@ const handleRequest = req => {
 
 const Game = function(id, dims, mines) {
 	const cellState = {
-		EMPTY: 0,
-		MINE: 1,
-		CLEARED: 2
+		EMPTY: 'empty',
+		MINE: 'mine',
+		CLEARED: 'cleared'
 	};
 
+	const size = dims.reduce((x, y) => x * y);
+	const max_mines = size - 1;
+
 	if(mines % 1 !== 0 || mines < 1)
-		throw new MinesError("invalid number of mines specified (" + mines +
-			")", { min_mines : 1, max_mines : size - 1 }
+		throw new MinesError(
+			"invalid number of mines specified (" + mines + ")",
+			{ min_mines : 1, max_mines : max_mines }
 		);
 
-	const size = dims.reduce((x, y) => x * y);
-	if (mines > size - 1)
+	if (mines > max_mines)
 		throw new MinesError("too many mines!", {
 			requested_size : size,
-			max_mines : size -1,
+			max_mines : max_mines,
 			requested_mines : mines,
 		});
 
@@ -243,7 +246,7 @@ const Game = function(id, dims, mines) {
 		//};
 
 		this.clear = () => {
-			gameGrid.set(dims[0], dims[1], cellState.CLEARED);
+			gameGrid.set(coords[0], coords[1], cellState.CLEARED);
 		};
 
 		/* multidim version */
