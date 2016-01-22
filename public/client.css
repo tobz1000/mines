@@ -1,0 +1,21 @@
+.table {
+	table-layout: fixed;
+	width: 100%;
+}
+
+.cell {
+	width: 20px;
+	height: 20px;
+}
+
+.cellUnknown {
+	background-color: #dddddd;
+}
+
+.cellFlagged {
+	background-color: #ddddff;
+}
+
+.cellMine {
+	background-color: #ffdddd;
+}

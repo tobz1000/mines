@@ -228,10 +228,18 @@ const Game = function(id, dims, mines) {
 		const surrounding = () => {
 			let surrCount = 0;
 			for (let i of [-1, 0, 1])
-				for (let j of [-1, 0, 1])
-					if((i !== 0 || j !== 0) && gameGrid.get(
-							[coords[0]+i],[coords[1]+j]) === cellState.MINE)
+				for (let j of [-1, 0, 1]) {
+					if(i === 0 && j == 0)
+						continue;
+
+					let x = coords[0] + i, y = coords[1] + j;
+
+					if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
+						continue;
+
+					if(gameGrid.get(x, y) === cellState.MINE)
 						surrCount++;
+				}
 			return surrCount;
 		};
 
@@ -263,7 +271,7 @@ const Game = function(id, dims, mines) {
 			return {
 				coords : coords,
 				/* 'surrounding' not needed when the user can see everything */
-				surrounding : !gameOver ? surrounding() : undefined,
+				surrounding : surrounding(),
 				state : state
 			};
 		};

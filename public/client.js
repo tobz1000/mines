@@ -30,10 +30,18 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 	if(dims.length !== 2)
 		throw new Error("Only 2d games supported!");
 
-	const size = dims.reduce((x, y) => x * y);
-	const cellsRem = size - mines;
+	/*	Non-DOM representation of game state.
+		TOOD: speed-test this versus only recording game state in DOM (i.e. with
+		<td> classes) */
+	const gameGrid = [];
+	for (let i = 0; i < dims[0]; i++) {
+		gameGrid[i] = [];
+		for (let j = 0; j < dims[1]; j++) {
+			gameGrid[i][j] = null;
+		}
+	}
 
-	const clearCell = (coords, $cell) => {
+	const clearCell = coords => {
 		action({action:'clearCell', id:id, coords:coords}, resp => {
 			if(resp.lastCell.coords[0] !== coords[0] ||
 					resp.lastCell.coords[1] !== coords[1]) {
@@ -41,10 +49,22 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 					coords + " response=" + resp);
 			}
 
+			/* TODO: a function to get this, or at least the id */
+			let $cell = $("#cell-" + coords[0] + "-" + coords[1]);
 			$cell.removeClass("cellUnknown");
 
-			if(resp.lastCell.state === 'cleared')
-				$cell.text(resp.lastCell.surrounding);
+			if(resp.lastCell.state === 'cleared') {
+				if(resp.lastCell.surrounding === 0)
+					clearSurrounding(coords);
+				else
+					$cell.text(resp.lastCell.surrounding);
+
+				$cell
+					.off('click')
+					.off('contextmenu')
+					.click(() => { clearSurrounding(coords); })
+				gameGrid[coords[0]][coords[1]] = resp.lastCell.surrounding;
+			}
 			else if(resp.lastCell.state === 'mine')
 				$cell.addClass("cellMine");
 			else
@@ -53,6 +73,41 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		});
 	};
 
+	const clearSurrounding = coords => {
+		for (let i of [-1, 0, 1])
+			for (let j of [-1, 0, 1]) {
+				if(i === 0 && j === 0)
+					continue;
+
+				let x = coords[0] + i, y = coords[1] + j;
+
+				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
+					continue;
+
+				/*	Don't attempt to clear an already-cleared cell, or a flagged
+					cell */
+				if(gameGrid[x][y] !== null)
+					continue;
+
+				clearCell([x, y]);
+			}
+	}
+
+	const toggleFlag = (coords, flag) => {
+		const FLAGGED_VAL = "f";
+		const flagged = gameGrid[coords[0]][coords[1]];
+		const $cell = $("#cell-" + coords[0] + "-" + coords[1]);
+
+		if(flagged !== FLAGGED_VAL && flagged !== null) {
+			console.error("Attempted to flag/unflag a revealed call at " +
+					coords);
+			return;
+		}
+
+		gameGrid[coords[0]][coords[1]] = flagged ? null : FLAGGED_VAL;
+		$cell.toggleClass("cellUnknown cellFlagged");
+	}
+
 	$gameArea.empty();
 
 	for(let i = 0; i < dims[0]; i++) {
@@ -60,12 +115,18 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		$gameArea.append($row);
 
 		for(let j = 0; j < dims[1]; j++) {
-			let $cell = $("<td>").addClass("cell cellUnknown")
-				// .attr('id', 'cell' + i + ',' + j)
-				.click(() => { clearCell([i, j], $cell) });
-			$row.append($cell);
+			$row.append(
+				$("<td>")
+					.addClass("cell cellUnknown")
+					.attr('id', 'cell-' + i + '-' + j)
+					.click(() => { clearCell([i, j]) })
+					.on('contextmenu', (e) => {
+						e.preventDefault();
+						toggleFlag([i, j]);
+					})
+			);
 		}
 	}
 }
 
-newGame([5,6], 5);
+newGame([10,10], 10);
