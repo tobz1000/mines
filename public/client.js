@@ -1,5 +1,7 @@
 "use strict";
 
+/* TODO: on game over, reveal whole game and stop click actions */
+
 let $gameArea, game;
 
 $(() => {
@@ -7,24 +9,32 @@ $(() => {
 	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
 })
 
+const newGame = (button) => {
+	let x = parseInt($("#dims0").val(), 10) || 10;
+	let y = parseInt($("#dims1").val(), 10) || 10;
+	let mines = parseInt($("#mineCount").val(), 10) || 10;
+	action(
+		{ action: 'newGame', dims: [x, y], 	mines: mines },
+		resp => {
+			game = new ClientGame(resp.id, resp.dims, resp.mines, $gameArea);
+		}
+	);
+};
+
 const action = (req, respFn) => {
+	/* TODO - proper 'fail' handler, once the server gives proper HTTP codes */
 	$.post('action', JSON.stringify(req), resp => {
 		if(resp.error) {
 			let errMsg = "Server error: " + resp.error;
 			if(resp.info)
 				errMsg += "\nInfo: " + JSON.stringify(resp.info);
-			console.error(errMsg);
+			$("#errMsg").text(errMsg).show();
 			return;
 		}
 
+		$("#errMsg").hide();
 		respFn(resp);
 	}, 'json');
-};
-
-const newGame = (dims, mines) => {
-	action({action:'newGame', dims:dims, mines:mines}, resp => {
-		game = new ClientGame(resp.id, resp.dims, resp.mines, $gameArea);
-	});
 };
 
 const ClientGame = function(id, dims, mines, $gameArea) {
@@ -94,6 +104,9 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			}
 	}
 
+	/* TODO: clean up switching of cell state, instead of the bodged on- and
+	off- stuff below. Then use the appropriate "switch to unrevealed cell"
+	code for each cell on init */
 	const toggleFlag = (coords) => {
 		const FLAGGED_VAL = "f";
 		const flagged = gameGrid[coords[0]][coords[1]];
@@ -126,12 +139,8 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 					.addClass("cell cellUnknown")
 					.attr('id', 'cell-' + i + '-' + j)
 					.click(() => { clearCell([i, j]) })
-					.on('contextmenu', (e) => {
-						toggleFlag([i, j]);
-					})
+					.on('contextmenu', (e) => { toggleFlag([i, j]);})
 			);
 		}
 	}
 }
-
-newGame([10,10], 10);

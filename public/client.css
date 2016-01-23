@@ -1,3 +1,11 @@
+* {
+	font-family: sans-serif;
+}
+
+#errMsg {
+	display: none;
+}
+
 .table {
 	table-layout: fixed;
 	width: 100%;
@@ -20,4 +28,9 @@
 
 .cellMine {
 	background-color: #ffdddd;
+}
+
+pre {
+	font-family: monospace;
+	white-space: pre-wrap;
 }
