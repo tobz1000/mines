@@ -10,7 +10,7 @@ const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
 const TY_DIMS = ty.arr.of([ty.int.pos,ty.int.pos]);
-const TY_COORDS = ty.arr.of([ty.int.nonneg,ty.int.nonneg])
+const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.of([ty.int.nonneg,ty.int.nonneg]));
 /* TODO: figure out a way to specify string length in assert object */
 const TY_ID = ty.str.ne;
 
@@ -41,7 +41,7 @@ server.post('/action', (req, resp) => {
 			else if (e instanceof MinesError)
 				responseObj = e;
 			else {
-				console.error("Unhandled error: " + e.stack);
+				console.error(`Unhandled error: ${e.stack}`);
 				responseObj = { error: "unknown error" };
 			}
 		}
@@ -57,8 +57,8 @@ const handleRequest = req => {
 
 	const getGame = (id) => {
 		let game = games[id];
-		if(!game)
-			throw new MinesError("unknown game id (" + id + ")");
+		if(!game) /* TODO: convert to template strings */
+			throw new MinesError(`unknown game id (${id})`);
 		return game;
 	};
 
@@ -76,19 +76,11 @@ const handleRequest = req => {
 			}
 		},
 
-		clearCell : {
-			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_COORDS }),
+		clearCells : {
+			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_COORDS_LIST }),
 			func : () => {
 				game = getGame(req.id);
-				game.clearCell(req.coords);
-			}
-		},
-
-		checkCell : {
-			paramChecks :ty.obj.with( { id : TY_ID, coords : TY_COORDS }),
-			func : () => {
-				game = getGame(req.id);
-				game.checkCell(req.coords);
+				game.clearCells(req.coords);
 			}
 		},
 
@@ -128,7 +120,7 @@ const handleRequest = req => {
 	} catch(e) {
 		if(e instanceof ty.TypeAssertionError) {
 			throw new MinesError(
-				"invalid parameters supplied for action \"" + actionName + "\"",
+				`invalid parameters supplied for action "${actionName}"`,
 				{
 					required_params : ty.Describe(gameAction.paramChecks),
 					supplied_params : req
@@ -153,7 +145,7 @@ const Game = function(id, dims, mines) {
 
 	if(mines % 1 !== 0 || mines < 1)
 		throw new MinesError(
-			"invalid number of mines specified (" + mines + ")",
+			`invalid number of mines specified (${mines})`,
 			{ min_mines : 1, max_mines : max_mines }
 		);
 
@@ -167,84 +159,90 @@ const Game = function(id, dims, mines) {
 	let gameOver = false;
 	let win = false;
 	let cellsRem = size - mines;
-	/* Information about the last cell cleared */
-	let lastUserCell;
+	/* Information about the last cell(s) cleared */
+	let lastUserCells = [];
 
 	const gameGrid = nd(_.shuffle(new Array(size)
 		.fill(cellState.MINE, 0, mines)
 		.fill(cellState.EMPTY, mines, size)
 	), dims);
 
-	this.gameState = verbose => {
-		return {
-			id : id,
-			gameOver : gameOver,
-			win : win,
-			dims : dims,
-			mines : mines,
-			cellsRem : cellsRem,
-			lastCell : lastUserCell,
-			/*	TODO: current cellState enums may be confusing for user.
-				Possible solution is to create two grids: one for mine
-				positions, and one for cleared squares - so the mine grid would
-				just be 0 and 1, easy to understand. Additionally, the user
-				could request the 'cleared' grid without ending the game. So
-				they could 'save' a game and come back to it? Also we should
-				output something better than raw ndarray. */
-			grid : gameOver && verbose ? gameGrid : undefined
-		};
+	/* multi-dim version - broken. */
+	// const surroundingCoords = function*() {
+	// 	const iter = (baseCoords, modCoords, dim) => {
+	// 		if(dim === 0) {
+	// 			/* Don't count the central cell itself */
+	// 			if(baseCoords.every((dim) => { return dim === 0; }))
+	// 				return 0;
+
+	// 			let newCoords = baseCoords.map((base, i) => {
+	// 				return base + modCoords[i];
+	// 			});
+
+	// 			let state = gameGrid.get.apply(this, newCoords);
+	// 			return state === cellState.MINE ? 1 : 0;
+	// 		}
+
+	// 		let ret = 0;
+	// 		for(let i of [-1, 0, 1]) {
+	// 			modCoords[dim - 1] = i;
+	// 			ret += iter(baseCoords, modCoords, dim - 1);
+	// 		}
+
+	// 		return ret;
+	// 	};
+
+	// 	return iter(coords, [], coords.length);
+	// }
+
+	/* Yields coordinates of surrounding cells */
+	const surroundingCoords = coords => {
+		let ret = [];
+		for (let i of [-1, 0, 1])
+			for (let j of [-1, 0, 1]) {
+				if(i === 0 && j == 0)
+					continue;
+
+				let x = coords[0] + i, y = coords[1] + j;
+
+				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
+					continue;
+
+				ret.push([x, y]);
+			}
+		return ret;
 	};
+
+	const clearSurrounding = coords => {
+		for(let surrCoords of surroundingCoords(coords)) {
+			if(gameOver)
+				break;
+
+			/* TODO: make getState() callable statically, with coords as params. */
+			if(new Cell(surrCoords).getState() !== cellState.CLEARED)
+				this.clearCells([surrCoords]);
+		}
+	}
 
 	/* Representation of a cell in the grid. gets/sets gameGrid state. */
 	const Cell = function(coords) {
-		/* multi-dim version - broken. */
-		// const surrounding = () => {
-		// 	const iter = (baseCoords, modCoords, dim) => {
-		// 		if(dim === 0) {
-		// 			/* Don't count the central cell itself */
-		// 			if(baseCoords.every((dim) => { return dim === 0; }))
-		// 				return 0;
-
-		// 			let newCoords = baseCoords.map((base, i) => {
-		// 				return base + modCoords[i];
-		// 			});
-
-		// 			let state = gameGrid.get.apply(this, newCoords);
-		// 			return state === cellState.MINE ? 1 : 0;
-		// 		}
-
-		// 		let ret = 0;
-		// 		for(let i of [-1, 0, 1]) {
-		// 			modCoords[dim - 1] = i;
-		// 			ret += iter(baseCoords, modCoords, dim - 1);
-		// 		}
-
-		// 		return ret;
-		// 	};
-
-		// 	return iter(coords, [], coords.length);
-		// }
-
-		const surrounding = () => {
+		this.surroundCount = () => {
 			let surrCount = 0;
-			for (let i of [-1, 0, 1])
-				for (let j of [-1, 0, 1]) {
-					if(i === 0 && j == 0)
-						continue;
 
-					let x = coords[0] + i, y = coords[1] + j;
+			for(let surrCoords of surroundingCoords(coords))
+				if(new Cell(surrCoords).getState() === cellState.MINE)
+					surrCount++;
 
-					if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
-						continue;
-
-					if(gameGrid.get(x, y) === cellState.MINE)
-						surrCount++;
-				}
 			return surrCount;
-		};
+		}
+
+		this.getState = () => { return gameGrid.get(coords[0], coords[1]); };
 
 		/* multidim version */
-		//this.clear = () => {
+		//this.getState = () => gameGrid.get.apply(this, coords);
+
+		/* multidim version */
+		//this.uncover = () => {
 		//	/*	ndarray.get needs coords as individual args, plus our new value
 		//		on the end. So we have to duplicate coords and add the value
 		//		to the end. */
@@ -253,53 +251,68 @@ const Game = function(id, dims, mines) {
 		//	gameGrid.set.apply(this, args);
 		//};
 
-		this.clear = () => {
-			gameGrid.set(coords[0], coords[1], cellState.CLEARED);
+		this.uncover = () => {
+			if(this.getState() === cellState.MINE)
+				gameOver = true;
+
+			else if(this.getState() === cellState.EMPTY) {
+				gameGrid.set(coords[0], coords[1], cellState.CLEARED);
+
+				if(--cellsRem <= 0) {
+					gameOver = true;
+					win = true;
+				}
+			}
 		};
-
-		/* multidim version */
-		//this.state = () => gameGrid.get.apply(this, coords);
-
-		this.state = () => { return gameGrid.get(coords[0], coords[1]); };
 
 		/* Information the player is allowed to know */
 		this.userCell = () => {
-			let state = this.state();
-			if(!gameOver && state !== cellState.CLEARED)
+			let state = this.getState(), surrounding;
+
+			if(gameOver || state === cellState.CLEARED)
+				surrounding = this.surroundCount();
+			else
 				state = undefined;
 
 			return {
 				coords : coords,
-				/* 'surrounding' not needed when the user can see everything */
-				surrounding : surrounding(),
+				surrounding : surrounding,
 				state : state
 			};
 		};
 	};
 
-	this.clearCell = coords => {
+	/*	Returns info to be seen by user (when there are no errors), and resets
+		lastUserCells for next turn. */
+	this.gameState = verbose => {
+		let state = {
+			id : id,
+			gameOver : gameOver,
+			win : win,
+			dims : dims,
+			mines : mines,
+			cellsRem : cellsRem,
+			newCellData : lastUserCells
+		};
+		lastUserCells = [];
+		return state;
+	};
+
+	this.clearCells = coordsArr => {
 		if(gameOver)
 			throw new MinesError("game over!");
 
-		/* Representation of a cell in the grid. gets/sets gameGrid state. */
-		let cell = new Cell(coords);
+		for(let coords of coordsArr) {
+			let cell = new Cell(coords);
+			cell.uncover();
 
-		if(cell.state() === cellState.MINE)
-			gameOver = true;
+			// if(gameOver)
+			// 	break;
 
-		else if (cell.state() === cellState.EMPTY) {
-			cell.clear();
-			if(--cellsRem <= 0) {
-				gameOver = true;
-				win = true;
-			}
+			lastUserCells.push(cell.userCell());
+			if(cell.surroundCount() === 0)
+				clearSurrounding(coords);
 		}
-
-		lastUserCell = cell.userCell();
-	}
-
-	this.checkCell = coords => {
-		lastUserCell = new Cell(coords).userCell();
 	}
 
 	this.endGame = () => {

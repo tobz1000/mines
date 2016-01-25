@@ -9,10 +9,15 @@ $(() => {
 	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
 })
 
-const newGame = (button) => {
-	let x = parseInt($("#dims0").val(), 10) || 10;
-	let y = parseInt($("#dims1").val(), 10) || 10;
-	let mines = parseInt($("#mineCount").val(), 10) || 10;
+const newGame = () => {
+	const getVal = (id, defaultVal) => {
+		return parseInt($(`#${id}`).val(), 10) || defaultVal;
+	}
+
+	const x = getVal(`dims0`, 10);
+	const y = getVal(`dims1`, 10);
+	const mines = getVal(`mineCount`, 10);
+
 	action(
 		{ action: 'newGame', dims: [x, y], 	mines: mines },
 		resp => {
@@ -25,9 +30,9 @@ const action = (req, respFn) => {
 	/* TODO - proper 'fail' handler, once the server gives proper HTTP codes */
 	$.post('action', JSON.stringify(req), resp => {
 		if(resp.error) {
-			let errMsg = "Server error: " + resp.error;
+			let errMsg = `Server error: ${resp.error}`;
 			if(resp.info)
-				errMsg += "\nInfo: " + JSON.stringify(resp.info);
+				errMsg += `\nInfo: ${JSON.stringify(resp.info)}`;
 			$("#errMsg").text(errMsg).show();
 			return;
 		}
@@ -38,6 +43,10 @@ const action = (req, respFn) => {
 };
 
 const ClientGame = function(id, dims, mines, $gameArea) {
+	const cellState = {
+		UNKNOWN : "u",
+		FLAGGED : "f"
+	}
 	if(dims.length !== 2)
 		throw new Error("Only 2d games supported!");
 
@@ -45,49 +54,22 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		TOOD: speed-test this versus only recording game state in DOM (i.e. with
 		<td> classes) */
 	const gameGrid = [];
-	for (let i = 0; i < dims[0]; i++) {
-		gameGrid[i] = [];
-		for (let j = 0; j < dims[1]; j++) {
-			gameGrid[i][j] = null;
-		}
-	}
 
-	const clearCell = coords => {
-		action({action:'clearCell', id:id, coords:coords}, resp => {
-			if(resp.lastCell.coords[0] !== coords[0] ||
-					resp.lastCell.coords[1] !== coords[1]) {
-				throw new Error("received coordinates do not match: coords=" +
-					coords + " response=" + resp);
-			}
-
-			/* TODO: a function to get this, or at least the id */
-			let $cell = $("#cell-" + coords[0] + "-" + coords[1]);
-			$cell.removeClass("cellUnknown");
-
-			if(resp.lastCell.state === 'cleared') {
-				if(resp.lastCell.surrounding === 0)
-					clearSurrounding(coords);
-				else
-					$cell.text(resp.lastCell.surrounding);
-
-				$cell
-					.off('click')
-					.off('contextmenu')
-					.click(() => { clearSurrounding(coords); })
-				gameGrid[coords[0]][coords[1]] = resp.lastCell.surrounding;
-			}
-			else if(resp.lastCell.state === 'mine')
-				$cell.addClass("cellMine");
-			else
-				throw new Error("unexpected cell state from server: \"" +
-						resp.lastCell.state + "\"");
+	const clearCells = coordsArr => {
+		action({ action:'clearCells', id:id, coords:coordsArr }, resp => {
+			for(let cellInfo of resp.newCellData)
+				changeState(
+					cellInfo.coords, cellInfo.state, cellInfo.surrounding
+				);
 		});
 	};
 
+	/* TODO: move this, and auto-zero-clear code, to server */
 	const clearSurrounding = coords => {
+		let surrCoords = [];
 		for (let i of [-1, 0, 1])
 			for (let j of [-1, 0, 1]) {
-				if(i === 0 && j === 0)
+				if(i === 0 && j == 0)
 					continue;
 
 				let x = coords[0] + i, y = coords[1] + j;
@@ -95,52 +77,79 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
 					continue;
 
-				/*	Don't attempt to clear an already-cleared cell, or a flagged
-					cell */
-				if(gameGrid[x][y] !== null)
+				/*	Don't clear an already-cleared cell, or a flagged cell */
+				if(gameGrid[x][y] !== cellState.UNKNOWN)
 					continue;
 
-				clearCell([x, y]);
+				surrCoords.push([x, y]);
 			}
+		clearCells(surrCoords);
 	}
 
-	/* TODO: clean up switching of cell state, instead of the bodged on- and
-	off- stuff below. Then use the appropriate "switch to unrevealed cell"
-	code for each cell on init */
-	const toggleFlag = (coords) => {
-		const FLAGGED_VAL = "f";
-		const flagged = gameGrid[coords[0]][coords[1]];
-		const $cell = $("#cell-" + coords[0] + "-" + coords[1]);
+	const cellId = coords => {
+		return `cell-${coords[0]}-${coords[1]}`;
+	}
 
-		if(flagged !== FLAGGED_VAL && flagged !== null) {
-			console.error("Attempted to flag/unflag a revealed cell at " +
-					coords);
-			return;
-		}
+	const changeState = (coords, newStateName, surrCount) => {
+		const states = {
+			flagged : {
+				gridState : cellState.FLAGGED,
+				class : 'cellFlagged',
+				rightClick : () => { changeState(coords, 'unknown'); },
+			},
+			mine : {
+				class : 'cellMine'
+			},
+			unknown : {
+				gridState : cellState.UNKNOWN,
+				class : 'cellUnknown',
+				click : () => { clearCells([coords]); },
+				rightClick: () => { changeState(coords, 'flagged'); }
+			},
+			cleared : {
+				gridState : surrCount,
+				class : 'cellCleared',
+				text : surrCount > 0 ? surrCount : undefined,
+				click : surrCount > 0 ?
+					() => { clearSurrounding(coords); } : undefined
+			}
+		};
 
-		gameGrid[coords[0]][coords[1]] = flagged ? null : FLAGGED_VAL;
-		$cell.toggleClass("cellUnknown cellFlagged");
+		const $cell = $(`#${cellId(coords)}`);
 
-		if(flagged)
-			$cell.click(() => { clearCell(coords) });
-		else
-			$cell.off('click');
+
+		$cell.off('click contextmenu');
+
+		const newState = states[newStateName];
+
+		if(!newState)
+			throw new Error(`unexpected cell state: "${newStateName}"`);
+
+		for(const s in states)
+			if(s !== newStateName && states[s].class)
+				$cell.removeClass(states[s].class);
+
+		gameGrid[coords[0]][coords[1]] = newState.gridState;
+		$cell.addClass(newState.class);
+		$cell.text(newState.text);
+		$cell.on('click', newState.click);
+		$cell.on('contextmenu', newState.rightClick);
 	}
 
 	$gameArea.empty();
 
 	for(let i = 0; i < dims[0]; i++) {
+		gameGrid[i] = [];
 		let $row = $("<tr>");
 		$gameArea.append($row);
 
 		for(let j = 0; j < dims[1]; j++) {
 			$row.append(
 				$("<td>")
-					.addClass("cell cellUnknown")
-					.attr('id', 'cell-' + i + '-' + j)
-					.click(() => { clearCell([i, j]) })
-					.on('contextmenu', (e) => { toggleFlag([i, j]);})
+					.attr('id', cellId([i, j]))
+					.addClass("cell")
 			);
+			changeState([i, j], 'unknown');
 		}
 	}
 }
