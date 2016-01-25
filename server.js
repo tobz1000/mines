@@ -306,9 +306,6 @@ const Game = function(id, dims, mines) {
 			let cell = new Cell(coords);
 			cell.uncover();
 
-			// if(gameOver)
-			// 	break;
-
 			lastUserCells.push(cell.userCell());
 			if(cell.surroundCount() === 0)
 				clearSurrounding(coords);

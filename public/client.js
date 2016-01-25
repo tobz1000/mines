@@ -115,15 +115,13 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			}
 		};
 
-		const $cell = $(`#${cellId(coords)}`);
-
-
-		$cell.off('click contextmenu');
-
 		const newState = states[newStateName];
-
 		if(!newState)
 			throw new Error(`unexpected cell state: "${newStateName}"`);
+
+		const $cell = $(`#${cellId(coords)}`);
+
+		$cell.off('click contextmenu');
 
 		for(const s in states)
 			if(s !== newStateName && states[s].class)
