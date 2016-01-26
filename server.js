@@ -1,5 +1,6 @@
 "use strict";
 const express = require('express');
+const sse = require('express-eventsource');
 const _ = require('underscore');
 const nd = require('ndarray');
 require('coffee-script/register');
@@ -19,14 +20,22 @@ const MinesError = function(error, info) {
 	this.info = info;
 }
 
-const server = express();
+const gameBroadcaster = sse();
 
-server.use(express.static(PUBLIC_HTML_DIR));
+const serverInit = () => {
+	express()
+		.use(express.static(PUBLIC_HTML_DIR))
+		.use('/watch', gameBroadcaster.middleware())
+		.post('/action', postResponse)
+		.listen(1066);
+}
+
+let games = {};
 
 /*	TODO: can't figure out how to process multiple requests at once!
 	Seems post requests are queued, and a new one isn't started until the
 	response for the last one is end()ed. */
-server.post('/action', (req, resp) => {
+const postResponse = (req, resp) => {
 	let body = "";
 	req.on('data', chunk => {
 		body += chunk;
@@ -34,7 +43,8 @@ server.post('/action', (req, resp) => {
 	req.on('end', () => {
 		let responseObj;
 		try {
-			responseObj = handleRequest(JSON.parse(body));
+			responseObj = performAction(JSON.parse(body));
+			gameBroadcaster.send(responseObj, responseObj.id);
 		} catch(e) {
 			if(e instanceof SyntaxError)
 				responseObj = { error: "malformed JSON request data" };
@@ -48,11 +58,9 @@ server.post('/action', (req, resp) => {
 		/* TODO: Proper http response codes */
 		resp.end(JSON.stringify(responseObj));
 	});
-}).listen(1066);
+};
 
-let games = {};
-
-const handleRequest = req => {
+const performAction = req => {
 	let actionName, gameAction, game;
 
 	const getGame = (id) => {
@@ -316,3 +324,5 @@ const Game = function(id, dims, mines) {
 		gameOver = true;
 	}
 }
+
+serverInit();
