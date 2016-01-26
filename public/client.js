@@ -27,18 +27,25 @@ const newGame = () => {
 };
 
 const action = (req, respFn) => {
+	const showMsg = msg => {
+		$("#gameInfo").text(msg).show()
+	}
+
 	/* TODO - proper 'fail' handler, once the server gives proper HTTP codes */
 	$.post('action', JSON.stringify(req), resp => {
 		if(resp.error) {
 			let errMsg = `Server error: ${resp.error}`;
 			if(resp.info)
 				errMsg += `\nInfo: ${JSON.stringify(resp.info)}`;
-			$("#errMsg").text(errMsg).show();
+			showMsg(errMsg);
 			return;
 		}
 
-		$("#errMsg").hide();
+		$("#gameInfo").hide();
 		respFn(resp);
+
+		if(resp.gameOver)
+			showMsg(resp.win ? "Win!!!1" : "Lose :(((");
 	}, 'json');
 };
 
@@ -64,12 +71,11 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		});
 	};
 
-	/* TODO: move this, and auto-zero-clear code, to server */
 	const clearSurrounding = coords => {
 		let surrCoords = [];
 		for (let i of [-1, 0, 1])
 			for (let j of [-1, 0, 1]) {
-				if(i === 0 && j == 0)
+				if(i === 0 && j === 0)
 					continue;
 
 				let x = coords[0] + i, y = coords[1] + j;
@@ -83,7 +89,8 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 				surrCoords.push([x, y]);
 			}
-		clearCells(surrCoords);
+		if(surrCoords.length > 0)
+			clearCells(surrCoords);
 	}
 
 	const cellId = coords => {
