@@ -6,27 +6,30 @@
 	display: none;
 }
 
-.table {
-	table-layout: fixed;
-	width: 100%;
-}
-
 .cell {
 	width: 20px;
 	height: 20px;
 	text-align: center;
+	cursor: default;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+	-ms-user-select: none;
 }
 
 .cellUnknown {
-	background-color: #dddddd;
+	background-color: #bbbbbb;
 }
 
 .cellFlagged {
-	background-color: #ddddff;
+	background-color: #9999ff;
 }
 
 .cellMine {
-	background-color: #ffdddd;
+	background-color: #ff5555;
+}
+
+.cellUnknown:hover, .cellSurrHover {
+	background-color: #dddddd;
 }
 
 pre {

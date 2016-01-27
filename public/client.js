@@ -54,6 +54,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		UNKNOWN : "u",
 		FLAGGED : "f"
 	}
+
 	if(dims.length !== 2)
 		throw new Error("Only 2d games supported!");
 
@@ -71,11 +72,12 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		});
 	};
 
-	const clearSurrounding = coords => {
-		let surrCoords = [];
+	/* Get surrounding co-ordinates that aren't cleared or flagged. */
+	const surroundingUnknownCoords = coords => {
+		let ret = [];
 		for (let i of [-1, 0, 1])
 			for (let j of [-1, 0, 1]) {
-				if(i === 0 && j === 0)
+				if(i === 0 && j == 0)
 					continue;
 
 				let x = coords[0] + i, y = coords[1] + j;
@@ -83,14 +85,29 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
 					continue;
 
-				/*	Don't clear an already-cleared cell, or a flagged cell */
 				if(gameGrid[x][y] !== cellState.UNKNOWN)
 					continue;
 
-				surrCoords.push([x, y]);
+				ret.push([x, y]);
 			}
+		return ret;
+	};
+
+	/* TODO: figure out a nice way to stop the flashing when the cursor moves
+	between two cells. Probably use border-collapse on the table, then some
+	other CSS to retain the white edges on cells. */
+	const hoverSurrounding = (coords, hoverOn) => {
+		let surrCoords = surroundingUnknownCoords(coords);
+		for(const coords of surrCoords)
+			$(`#${cellId(coords)}`).toggleClass("cellSurrHover", hoverOn);
+	}
+
+	const clearSurrounding = (coords) => {
+		let surrCoords = surroundingUnknownCoords(coords);
 		if(surrCoords.length > 0)
 			clearCells(surrCoords);
+
+		hoverSurrounding(coords, false);
 	}
 
 	const cellId = coords => {
@@ -118,7 +135,11 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 				class : 'cellCleared',
 				text : surrCount > 0 ? surrCount : undefined,
 				click : surrCount > 0 ?
-					() => { clearSurrounding(coords); } : undefined
+					() => { clearSurrounding(coords); } : undefined,
+				mouseover : surrCount > 0 ?
+					() => { hoverSurrounding(coords, true); } : undefined,
+				mouseout : surrCount > 0 ?
+					() => { hoverSurrounding(coords, false); } : undefined
 			}
 		};
 
@@ -128,7 +149,8 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 		const $cell = $(`#${cellId(coords)}`);
 
-		$cell.off('click contextmenu');
+		$cell.mouseout();
+		$cell.off('click contextmenu mouseover mouseout');
 
 		for(const s in states)
 			if(s !== newStateName && states[s].class)
@@ -139,6 +161,13 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		$cell.text(newState.text);
 		$cell.on('click', newState.click);
 		$cell.on('contextmenu', newState.rightClick);
+		$cell.on('mouseover', newState.mouseover);
+		$cell.on('mouseout', newState.mouseout);
+
+		/* TODO: this is to highglight surrounding cells right after clicking
+		an unknown cell. Doesn't work (:hover is false); don't know why. */
+		// if($cell.is(":hover"))
+		// 	$cell.mouseover();
 	}
 
 	$gameArea.empty();
