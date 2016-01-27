@@ -6,7 +6,8 @@ const nd = require('ndarray');
 require('coffee-script/register');
 const ty = require('assert-type');
 
-const GAME_ID_LEN = 10;
+const GAME_ID_LEN = 5;
+const GAME_PASS_LEN = 10;
 const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
@@ -20,17 +21,26 @@ const MinesError = function(error, info) {
 	this.info = info;
 }
 
-const gameBroadcaster = sse();
-
 const serverInit = () => {
 	express()
 		.use(express.static(PUBLIC_HTML_DIR))
-		.use('/watch', gameBroadcaster.middleware())
+		.use('/watch', gameBroadcaster)
 		.post('/action', postResponse)
 		.listen(1066);
 }
 
-let games = {};
+const gameBroadcaster = (req, resp, next) => {
+	getGame({ id : req.query.id}).broadcaster.middleware()(req, resp, next);
+}
+
+let gameIds = {}, gamePasses = {};
+
+const getGame = getter => {
+	let game = gamePasses[getter.pass] || gameIds[getter.id];
+	if(!game) /* TODO: convert to template strings */
+		throw new MinesError(`unknown game (${getter})`);
+	return game;
+};
 
 /*	TODO: can't figure out how to process multiple requests at once!
 	Seems post requests are queued, and a new one isn't started until the
@@ -44,7 +54,6 @@ const postResponse = (req, resp) => {
 		let responseObj;
 		try {
 			responseObj = performAction(JSON.parse(body));
-			gameBroadcaster.send(responseObj, responseObj.id);
 		} catch(e) {
 			if(e instanceof SyntaxError)
 				responseObj = { error: "malformed JSON request data" };
@@ -60,34 +69,36 @@ const postResponse = (req, resp) => {
 	});
 };
 
+/* Performs the action requested by a player. Returns the gameState, and
+broadcasts it. */
 const performAction = req => {
 	let actionName, gameAction, game;
-
-	const getGame = (id) => {
-		let game = games[id];
-		if(!game) /* TODO: convert to template strings */
-			throw new MinesError(`unknown game id (${id})`);
-		return game;
-	};
 
 	/* TODO: These can probably inherit a base GameAction class? */
 	const actions = {
 		newGame : {
 			paramChecks : ty.obj.with({ dims : TY_DIMS, mines : ty.int.pos }),
 			func : () => {
-				let id;
-				do /* Avoid game id collision */
-					id = Math.random().toString(36).substr(2, GAME_ID_LEN);
-				while(games[id]);
+				const randStr = len => {
+					return Math.random().toString(36).substr(2, len);
+				}
+				/* TODO: store a gameIds array and gamePasses array. Watchers
+				only specify id; players specify password (or both). */
+				let id, pass;
+				do { /* Avoid game id collision */
+					id = randStr(GAME_ID_LEN);
+					pass = randStr(GAME_PASS_LEN);
+				} while(gameIds[id] || gamePasses[pass]);
 				game = new Game(id, req.dims, req.mines);
-				games[id] = game;
+				gameIds[id] = game;
+				gamePasses[pass] = game;
 			}
 		},
 
 		clearCells : {
 			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_COORDS_LIST }),
 			func : () => {
-				game = getGame(req.id);
+				game = getGame({ id: req.id });
 				game.clearCells(req.coords);
 			}
 		},
@@ -95,7 +106,7 @@ const performAction = req => {
 		endGame : {
 			paramChecks : ty.obj.with({ id : TY_ID }),
 			func : () => {
-				game = getGame(req.id);
+				game = getGame({ id : req.id });
 				game.endGame();
 			}
 		},
@@ -104,7 +115,7 @@ const performAction = req => {
 		gameState : {
 			paramChecks : ty.obj.with({ id : TY_ID }),
 			func : () => {
-				game = getGame(req.id);
+				game = getGame({ id : req.id });
 			}
 		}
 	};
@@ -138,7 +149,9 @@ const performAction = req => {
 		else throw e;
 	}
 	gameAction.func();
-	return game.gameState();
+	const gameState = game.gameState();
+	game.broadcaster.send(gameState);
+	return gameState;
 }
 
 const Game = function(id, dims, mines) {
@@ -289,6 +302,8 @@ const Game = function(id, dims, mines) {
 			};
 		};
 	};
+
+	this.broadcaster = sse({ history : Infinity });
 
 	/*	Returns info to be seen by user (when there are no errors), and resets
 		lastUserCells for next turn. */
