@@ -30,6 +30,11 @@ const serverInit = () => {
 }
 
 const gameBroadcaster = (req, resp, next) => {
+	/* Hacky; uses sse's reconnection replay to get an arbitrary number of
+	events. */
+	if(req.query.from !== undefined)
+		req.headers['last-event-id'] = Number(req.query.from) - 1;
+
 	getGame({ id : req.query.id}).broadcaster.middleware()(req, resp, next);
 }
 
@@ -37,8 +42,8 @@ let gameIds = {}, gamePasses = {};
 
 const getGame = getter => {
 	let game = gamePasses[getter.pass] || gameIds[getter.id];
-	if(!game) /* TODO: convert to template strings */
-		throw new MinesError(`unknown game (${getter})`);
+	if(!game)
+		throw new Error(`unknown game ${JSON.stringify(getter)}`);
 	return game;
 };
 
