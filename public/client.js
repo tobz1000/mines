@@ -7,7 +7,7 @@ let $gameArea, game;
 $(() => {
 	$gameArea = $("#gameArea");
 	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
-})
+});
 
 const newGame = () => {
 	const getVal = (id, defaultVal) => {
@@ -42,7 +42,9 @@ const action = (req, respFn) => {
 		}
 
 		$("#gameInfo").hide();
-		respFn(resp);
+
+		if(respFn)
+			respFn(resp);
 
 		if(resp.gameOver)
 			showMsg(resp.win ? "Win!!!1" : "Lose :(((");
@@ -55,6 +57,28 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		FLAGGED : "f"
 	}
 
+	new EventSource(`watch?id=${id}&from=0`)
+		.addEventListener('message', (resp) => {
+			newTurn(JSON.parse(resp.data).newCellData);
+			updateGrid(resp.lastEventId);
+		});
+
+	const newTurn = data => {
+		gameTurns.push(data);
+	}
+
+	const updateGrid = newTurnNumber => {
+		const reversing = newTurnNumber < currTurn;
+		for (let i = currTurn + 1; i <= newTurnNumber; i++)
+			for (let cellData of gameTurns[i]) {
+				changeState(
+					cellData.coords,
+					reversing ? 'unknown' : cellData.state,
+					cellData.surrounding
+				);
+			}
+	}
+
 	if(dims.length !== 2)
 		throw new Error("Only 2d games supported!");
 
@@ -62,14 +86,13 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		TOOD: speed-test this versus only recording game state in DOM (i.e. with
 		<td> classes) */
 	const gameGrid = [];
+	/* List of lists of cellDatas, to represent each turn in the game. */
+	const gameTurns = [];
+	/* Turn 0 is just the new game state with no mines revealed */
+	const currTurn = 0;
 
 	const clearCells = coordsArr => {
-		action({ action:'clearCells', id:id, coords:coordsArr }, resp => {
-			for(let cellInfo of resp.newCellData)
-				changeState(
-					cellInfo.coords, cellInfo.state, cellInfo.surrounding
-				);
-		});
+		action({ action : 'clearCells', id : id, coords : coordsArr });
 	};
 
 	/* Get surrounding co-ordinates that aren't cleared or flagged. */
@@ -99,7 +122,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 	const hoverSurrounding = (coords, hoverOn) => {
 		let surrCoords = surroundingUnknownCoords(coords);
 		for(const coords of surrCoords)
-			$(`#${cellId(coords)}`).toggleClass("cellSurrHover", hoverOn);
+			$getCell(coords).toggleClass("cellSurrHover", hoverOn);
 	}
 
 	const clearSurrounding = (coords) => {
@@ -112,6 +135,10 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 	const cellId = coords => {
 		return `cell-${coords[0]}-${coords[1]}`;
+	}
+
+	const $getCell = coords => {
+		return $(`#${cellId(coords)}`);
 	}
 
 	const changeState = (coords, newStateName, surrCount) => {
@@ -147,7 +174,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		if(!newState)
 			throw new Error(`unexpected cell state: "${newStateName}"`);
 
-		const $cell = $(`#${cellId(coords)}`);
+		const $cell = $getCell(coords);
 
 		$cell.mouseout();
 		$cell.off('click contextmenu mouseover mouseout');

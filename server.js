@@ -32,7 +32,7 @@ const serverInit = () => {
 const gameBroadcaster = (req, resp, next) => {
 	/* Hacky; uses sse's reconnection replay to get an arbitrary number of
 	events. */
-	if(req.query.from !== undefined)
+	if(!req.get('last-event-id') && req.query.from !== undefined)
 		req.headers['last-event-id'] = Number(req.query.from) - 1;
 
 	getGame({ id : req.query.id}).broadcaster.middleware()(req, resp, next);
@@ -326,6 +326,7 @@ const Game = function(id, dims, mines) {
 		return state;
 	};
 
+	/* TODO: if we lose, add all mines to lastUserCells */
 	this.clearCells = coordsArr => {
 		if(gameOver)
 			throw new MinesError("game over!");
