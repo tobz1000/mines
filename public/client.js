@@ -17,11 +17,13 @@ const newGame = () => {
 	const x = getVal(`dims0`, 10);
 	const y = getVal(`dims1`, 10);
 	const mines = getVal(`mineCount`, 10);
+	const pass = Math.random().toString(36).substr(2, 10);
 
 	action(
-		{ action: 'newGame', dims: [x, y], 	mines: mines },
+		{ action: 'newGame', dims: [x, y], mines: mines, pass: pass },
 		resp => {
-			game = new ClientGame(resp.id, resp.dims, resp.mines, $gameArea);
+			game = new ClientGame(resp.id, pass, resp.dims, resp.mines,
+					$gameArea);
 		}
 	);
 };
@@ -51,7 +53,7 @@ const action = (req, respFn) => {
 	}, 'json');
 };
 
-const ClientGame = function(id, dims, mines, $gameArea) {
+const ClientGame = function(id, pass, dims, mines, $gameArea) {
 	const cellState = {
 		UNKNOWN : "u",
 		FLAGGED : "f"
@@ -59,24 +61,39 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 	new EventSource(`watch?id=${id}&from=0`)
 		.addEventListener('message', (resp) => {
-			newTurn(JSON.parse(resp.data).newCellData);
-			updateGrid(resp.lastEventId);
+			const turnNumber = Number(resp.lastEventId);
+			newTurn(JSON.parse(resp.data).newCellData, turnNumber);
+			updateGrid(turnNumber);
+			latestTurn = turnNumber;
 		});
 
-	const newTurn = data => {
-		gameTurns.push(data);
+	const newTurn = (data, count) => {
+		console.log(count);
+		console.log(data);
+		gameTurns[count] = data;
+		$("#turnList").append($("<li>")
+			.click(() => { updateGrid(count); })
+			.text("Turn")
+			.attr("value", count)
+		);
 	}
 
 	const updateGrid = newTurnNumber => {
-		const reversing = newTurnNumber < currTurn;
-		for (let i = currTurn + 1; i <= newTurnNumber; i++)
+		const rev = newTurnNumber < currentTurn;
+		const start = (rev ? newTurnNumber : currentTurn) + 1;
+		const end = rev ? currentTurn : newTurnNumber;
+
+		for (let i = start; i <= end; i++) {
 			for (let cellData of gameTurns[i]) {
 				changeState(
 					cellData.coords,
-					reversing ? 'unknown' : cellData.state,
+					rev ? 'unknown' : cellData.state,
 					cellData.surrounding
 				);
 			}
+		}
+
+		currentTurn = newTurnNumber;
 	}
 
 	if(dims.length !== 2)
@@ -88,11 +105,16 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 	const gameGrid = [];
 	/* List of lists of cellDatas, to represent each turn in the game. */
 	const gameTurns = [];
-	/* Turn 0 is just the new game state with no mines revealed */
-	const currTurn = 0;
+	let currentTurn = 0;
+	let latestTurn = 0;
 
 	const clearCells = coordsArr => {
-		action({ action : 'clearCells', id : id, coords : coordsArr });
+		action({
+			action : 'clearCells',
+			id : id,
+			pass: pass,
+			coords : coordsArr
+		});
 	};
 
 	/* Get surrounding co-ordinates that aren't cleared or flagged. */
@@ -122,7 +144,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 	const hoverSurrounding = (coords, hoverOn) => {
 		let surrCoords = surroundingUnknownCoords(coords);
 		for(const coords of surrCoords)
-			$getCell(coords).toggleClass("cellSurrHover", hoverOn);
+			$getCell(coords).toggleClass("cellHover", hoverOn);
 	}
 
 	const clearSurrounding = (coords) => {
@@ -146,7 +168,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			flagged : {
 				gridState : cellState.FLAGGED,
 				class : 'cellFlagged',
-				rightClick : () => { changeState(coords, 'unknown'); },
+				contextmenu : () => { changeState(coords, 'unknown'); },
 			},
 			mine : {
 				class : 'cellMine'
@@ -155,7 +177,9 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 				gridState : cellState.UNKNOWN,
 				class : 'cellUnknown',
 				click : () => { clearCells([coords]); },
-				rightClick: () => { changeState(coords, 'flagged'); }
+				contextmenu : () => { changeState(coords, 'flagged'); },
+				mouseover : () => { $getCell(coords).addClass('cellHover'); },
+				mouseout : () => { $getCell(coords).removeClass('cellHover'); }
 			},
 			cleared : {
 				gridState : surrCount,
@@ -170,14 +194,22 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			}
 		};
 
+		/* Disable user game actions when viewing a past turn */
+		const ifLatestTurn = func => {
+			if (func && currentTurn === latestTurn)
+				func();
+		};
+
 		const newState = states[newStateName];
 		if(!newState)
 			throw new Error(`unexpected cell state: "${newStateName}"`);
 
 		const $cell = $getCell(coords);
 
+		/* Reverse any current mouseover effect */
 		$cell.mouseout();
-		$cell.off('click contextmenu mouseover mouseout');
+		$cell.off();
+		$cell.text("");
 
 		for(const s in states)
 			if(s !== newStateName && states[s].class)
@@ -186,23 +218,40 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		gameGrid[coords[0]][coords[1]] = newState.gridState;
 		$cell.addClass(newState.class);
 		$cell.text(newState.text);
-		$cell.on('click', newState.click);
-		$cell.on('contextmenu', newState.rightClick);
-		$cell.on('mouseover', newState.mouseover);
-		$cell.on('mouseout', newState.mouseout);
 
-		/* TODO: this is to highglight surrounding cells right after clicking
-		an unknown cell. Doesn't work (:hover is false); don't know why. */
+		/* Apply mouse actions to cell */
+		for (let mouseAction of [
+			'click',
+			'contextmenu',
+			'mouseover',
+			'mouseout'
+		]) {
+			if(newState[mouseAction]) {
+				/* Check game is on latest move before performing action */
+				$cell.on(mouseAction, () => {
+					if(currentTurn === latestTurn)
+						newState[mouseAction]();
+				});
+			}
+		}
+
+		/* TODO: this is to meant to highlight surrounding cells right after
+		clicking an unknown cell. Doesn't work (:hover is false); don't know
+		why. */
 		// if($cell.is(":hover"))
 		// 	$cell.mouseover();
 	}
 
 	$gameArea.empty();
 
+	let $gameTable = $("<table>");
+	$gameArea.append($gameTable);
+	$gameArea.append($("<ol>").attr("id", "turnList"));
+
 	for(let i = 0; i < dims[0]; i++) {
 		gameGrid[i] = [];
 		let $row = $("<tr>");
-		$gameArea.append($row);
+		$gameTable.append($row);
 
 		for(let j = 0; j < dims[1]; j++) {
 			$row.append(

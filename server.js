@@ -7,14 +7,11 @@ require('coffee-script/register');
 const ty = require('assert-type');
 
 const GAME_ID_LEN = 5;
-const GAME_PASS_LEN = 10;
 const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
 const TY_DIMS = ty.arr.of([ty.int.pos,ty.int.pos]);
 const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.of([ty.int.nonneg,ty.int.nonneg]));
-/* TODO: figure out a way to specify string length in assert object */
-const TY_ID = ty.str.ne;
 
 const MinesError = function(error, info) {
 	this.error = error;
@@ -30,20 +27,20 @@ const serverInit = () => {
 }
 
 const gameBroadcaster = (req, resp, next) => {
-	/* Hacky; uses sse's reconnection replay to get an arbitrary number of
-	events. */
+	/* Hacky; uses sse's reconnection replay to get all events from a given
+	point. */
 	if(!req.get('last-event-id') && req.query.from !== undefined)
 		req.headers['last-event-id'] = Number(req.query.from) - 1;
 
-	getGame({ id : req.query.id}).broadcaster.middleware()(req, resp, next);
+	getGame(req.query.id).broadcaster.middleware()(req, resp, next);
 }
 
-let gameIds = {}, gamePasses = {};
+let gameIds = {};
 
-const getGame = getter => {
-	let game = gamePasses[getter.pass] || gameIds[getter.id];
+const getGame = id => {
+	let game = gameIds[id];
 	if(!game)
-		throw new Error(`unknown game ${JSON.stringify(getter)}`);
+		throw new Error(`unknown game  id: ${JSON.stringify(id)}`);
 	return game;
 };
 
@@ -82,45 +79,32 @@ const performAction = req => {
 	/* TODO: These can probably inherit a base GameAction class? */
 	const actions = {
 		newGame : {
-			paramChecks : ty.obj.with({ dims : TY_DIMS, mines : ty.int.pos }),
+			paramChecks : ty.obj.with({
+				dims : TY_DIMS,
+				mines : ty.int.pos,
+				pass : ty.str.ne
+			}),
 			func : () => {
-				const randStr = len => {
-					return Math.random().toString(36).substr(2, len);
-				}
-				/* TODO: store a gameIds array and gamePasses array. Watchers
-				only specify id; players specify password (or both). */
-				let id, pass;
+				let id;
 				do { /* Avoid game id collision */
-					id = randStr(GAME_ID_LEN);
-					pass = randStr(GAME_PASS_LEN);
-				} while(gameIds[id] || gamePasses[pass]);
-				game = new Game(id, req.dims, req.mines);
+					id = Math.random().toString(36).substr(2, GAME_ID_LEN);
+				} while(gameIds[id]);
+				game = new Game(id, req.pass, req.dims, req.mines);
 				gameIds[id] = game;
-				gamePasses[pass] = game;
 			}
 		},
 
 		clearCells : {
-			paramChecks : ty.obj.with({ id : TY_ID, coords : TY_COORDS_LIST }),
+			paramChecks : ty.obj.with({
+				id : ty.str.ne,
+				pass :  ty.str.ne,
+				coords : TY_COORDS_LIST
+			}),
 			func : () => {
-				game = getGame({ id: req.id });
+				game = getGame(req.id);
+				if(game.pass !== req.pass)
+					throw new MinesError("Incorrect password!");
 				game.clearCells(req.coords);
-			}
-		},
-
-		endGame : {
-			paramChecks : ty.obj.with({ id : TY_ID }),
-			func : () => {
-				game = getGame({ id : req.id });
-				game.endGame();
-			}
-		},
-
-		/* No action, just return current game state. */
-		gameState : {
-			paramChecks : ty.obj.with({ id : TY_ID }),
-			func : () => {
-				game = getGame({ id : req.id });
 			}
 		}
 	};
@@ -149,7 +133,7 @@ const performAction = req => {
 					required_params : ty.Describe(gameAction.paramChecks),
 					supplied_params : req
 				}
-			)
+			);
 		}
 		else throw e;
 	}
@@ -159,13 +143,14 @@ const performAction = req => {
 	return gameState;
 }
 
-const Game = function(id, dims, mines) {
+const Game = function(id, pass, dims, mines) {
 	const cellState = {
 		EMPTY: 'empty',
 		MINE: 'mine',
 		CLEARED: 'cleared'
 	};
 
+	this.pass = pass;
 	const size = dims.reduce((x, y) => x * y);
 	const max_mines = size - 1;
 
@@ -339,10 +324,6 @@ const Game = function(id, dims, mines) {
 			if(cell.surroundCount() === 0)
 				clearSurrounding(coords);
 		}
-	}
-
-	this.endGame = () => {
-		gameOver = true;
 	}
 }
 
