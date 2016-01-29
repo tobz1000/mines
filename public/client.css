@@ -2,10 +2,6 @@
 	font-family: sans-serif;
 }
 
-#gameInfo {
-	display: none;
-}
-
 #gameArea {
 	display: flex;
 }

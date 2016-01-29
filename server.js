@@ -21,19 +21,26 @@ const MinesError = function(error, info) {
 const serverInit = () => {
 	express()
 		.use(express.static(PUBLIC_HTML_DIR))
-		.use('/watch', gameBroadcaster)
+		.use('/games', (req, resp, next) => {
+			sseReplayer(gameLister, req, resp, next);
+		})
+		.use('/watch', (req, resp, next) => {
+			sseReplayer(getGame(req.query.id).broadcaster, req, resp, next);
+		})
 		.post('/action', postResponse)
 		.listen(1066);
 }
 
-const gameBroadcaster = (req, resp, next) => {
-	/* Hacky; uses sse's reconnection replay to get all events from a given
-	point. */
+/* Hacky; uses sse's reconnection replay to get all events from a given
+point in history. */
+const sseReplayer = (sse, req, resp, next) => {
 	if(!req.get('last-event-id') && req.query.from !== undefined)
 		req.headers['last-event-id'] = Number(req.query.from) - 1;
 
-	getGame(req.query.id).broadcaster.middleware()(req, resp, next);
+	sse.middleware()(req, resp, next);
 }
+
+const gameLister = sse({ history : Infinity });
 
 let gameIds = {};
 
@@ -91,6 +98,7 @@ const performAction = req => {
 				} while(gameIds[id]);
 				game = new Game(id, req.pass, req.dims, req.mines);
 				gameIds[id] = game;
+				gameLister.send(game.gameState());
 			}
 		},
 

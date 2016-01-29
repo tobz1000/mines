@@ -2,7 +2,7 @@
 
 /* TODO: on game over, reveal whole game and stop click actions */
 
-let $gameArea, game;
+let $gameArea, game, gamePasses = [];
 
 $(() => {
 	$gameArea = $("#gameArea");
@@ -22,17 +22,17 @@ const newGame = () => {
 	action(
 		{ action: 'newGame', dims: [x, y], mines: mines, pass: pass },
 		resp => {
-			game = new ClientGame(resp.id, pass, resp.dims, resp.mines,
-					$gameArea);
+			gamePasses[resp.id] = pass;
+			game = new ClientGame(resp.id, resp.dims, resp.mines, $gameArea);
 		}
 	);
 };
 
-const action = (req, respFn) => {
-	const showMsg = msg => {
-		$("#gameInfo").text(msg).show()
-	}
+const showMsg = msg => {
+	$("#gameInfo").text(msg).show()
+}
 
+const action = (req, respFn) => {
 	/* TODO - proper 'fail' handler, once the server gives proper HTTP codes */
 	$.post('action', JSON.stringify(req), resp => {
 		if(resp.error) {
@@ -43,17 +43,12 @@ const action = (req, respFn) => {
 			return;
 		}
 
-		$("#gameInfo").hide();
-
 		if(respFn)
 			respFn(resp);
-
-		if(resp.gameOver)
-			showMsg(resp.win ? "Win!!!1" : "Lose :(((");
 	}, 'json');
 };
 
-const ClientGame = function(id, pass, dims, mines, $gameArea) {
+const ClientGame = function(id, dims, mines, $gameArea) {
 	const cellState = {
 		UNKNOWN : "u",
 		FLAGGED : "f"
@@ -62,14 +57,19 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 	new EventSource(`watch?id=${id}&from=0`)
 		.addEventListener('message', (resp) => {
 			const turnNumber = Number(resp.lastEventId);
-			newTurn(JSON.parse(resp.data).newCellData, turnNumber);
+			const data = JSON.parse(resp.data);
+
+			newTurn(data.newCellData, turnNumber);
 			updateGrid(turnNumber);
 			latestTurn = turnNumber;
+
+			if(data.gameOver) {
+				gameOver = true;
+				showMsg(data.win ? "Win!!!1" : "Lose :(((");
+			}
 		});
 
 	const newTurn = (data, count) => {
-		console.log(count);
-		console.log(data);
 		gameTurns[count] = data;
 		$("#turnList").append($("<li>")
 			.click(() => { updateGrid(count); })
@@ -107,12 +107,16 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 	const gameTurns = [];
 	let currentTurn = 0;
 	let latestTurn = 0;
+	let gameOver = false;
 
 	const clearCells = coordsArr => {
+		if(!gamePasses[id])
+			throw new Error(`Don't have the password for game '${id}'`);
+
 		action({
 			action : 'clearCells',
 			id : id,
-			pass: pass,
+			pass: gamePasses[id],
 			coords : coordsArr
 		});
 	};
@@ -140,7 +144,7 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 
 	/* TODO: figure out a nice way to stop the flashing when the cursor moves
 	between two cells. Probably use border-collapse on the table, then some
-	other CSS to retain the white edges on cells. */
+	other CSS to retain the white edges on cells. Or just use fancy fading. */
 	const hoverSurrounding = (coords, hoverOn) => {
 		let surrCoords = surroundingUnknownCoords(coords);
 		for(const coords of surrCoords)
@@ -161,6 +165,12 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 
 	const $getCell = coords => {
 		return $(`#${cellId(coords)}`);
+	}
+
+	/* Disable user game actions when viewing a past turn, or someone else's
+	game */
+	const inPlayState = () => {
+		return !gameOver && currentTurn === latestTurn && gamePasses[id];
 	}
 
 	const changeState = (coords, newStateName, surrCount) => {
@@ -194,12 +204,6 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 			}
 		};
 
-		/* Disable user game actions when viewing a past turn */
-		const ifLatestTurn = func => {
-			if (func && currentTurn === latestTurn)
-				func();
-		};
-
 		const newState = states[newStateName];
 		if(!newState)
 			throw new Error(`unexpected cell state: "${newStateName}"`);
@@ -224,12 +228,12 @@ const ClientGame = function(id, pass, dims, mines, $gameArea) {
 			'click',
 			'contextmenu',
 			'mouseover',
-			'mouseout'
+			'mouseout',
+			'mouseup'
 		]) {
 			if(newState[mouseAction]) {
-				/* Check game is on latest move before performing action */
 				$cell.on(mouseAction, () => {
-					if(currentTurn === latestTurn)
+					if(inPlayState())
 						newState[mouseAction]();
 				});
 			}

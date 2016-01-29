@@ -3,6 +3,11 @@
 <link rel="stylesheet" type="text/css" href="client.css" />
 <div id="gameArea"></div>
 
+<button onclick="resumeGame()">Play</button>
+<button onclick="pauseGame()">Pause</button>
+<br>
+<br>
+
 <label for="mineCount">Mines:</label>
 <input type="number" id="mineCount" min="1" max="400" placeholder="10">
 <label for="dims0">Columns:</label>
@@ -11,8 +16,6 @@
 <input type="number" id="dims1" min="2" max="25" placeholder="10">
 <br>
 <button onclick="newGame()">New Game</button>
+<ul id="gameList"></ul>
 
 <pre id="gameInfo"></pre>
-
-<button onclick="resumeGame()">Play</button>
-<button onclick="pauseGame()">Pause</button>
