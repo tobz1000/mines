@@ -250,7 +250,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 	let $gameTable = $("<table>");
 	$gameArea.append($gameTable);
-	$gameArea.append($("<ol>").attr("id", "turnList"));
+	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
 
 	for(let i = 0; i < dims[0]; i++) {
 		gameGrid[i] = [];
@@ -261,7 +261,7 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 			$row.append(
 				$("<td>")
 					.attr('id', cellId([i, j]))
-					.addClass("cell")
+					.addClass("cell laminate")
 			);
 			changeState([i, j], 'unknown');
 		}

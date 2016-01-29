@@ -6,14 +6,18 @@
 	display: flex;
 }
 
-.cell {
-	width: 20px;
-	height: 20px;
-	text-align: center;
+/* No highlighting of cursor-changing */
+.laminate {
 	cursor: default;
 	-moz-user-select: none;
 	-webkit-user-select: none;
 	-ms-user-select: none;
+}
+
+.cell {
+	width: 20px;
+	height: 20px;
+	text-align: center;
 }
 
 .cellUnknown {
