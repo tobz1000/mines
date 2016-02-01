@@ -1,13 +1,32 @@
 "use strict";
 
-/* TODO: on game over, reveal whole game and stop click actions */
+/* TODO: store game passwords in cookies */
+/* TODO: prettier game list & turn list; highlight current game/turn */
 
-let $gameArea, game, gamePasses = [];
+let $gameArea, currentGame, gamePasses = [];
 
 $(() => {
 	$gameArea = $("#gameArea");
 	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
+
+	new EventSource(`games?from=0`)
+		.addEventListener('message', refreshGameList);
 });
+
+const refreshGameList = resp => {
+	$("#gameList").empty();
+
+	for(const g of JSON.parse(resp.data)) {
+		/* TODO: race condition for display of "watchable"/"playable", if the
+		response from newGame() comes is received after the gameLister entry. */
+		const label = `${g.id} (${g.dims[0]}x${g.dims[1]}, ${g.mines}, ` +
+				`${gamePasses[g.id] ? "playable" : "watchable"})`;
+		$("#gameList").append($("<li>")
+			.text(label)
+			.click(() => { displayGame(g, gamePasses[g.id]); })
+		);
+	}
+}
 
 const newGame = () => {
 	const getVal = (id, defaultVal) => {
@@ -23,15 +42,28 @@ const newGame = () => {
 		{ action: 'newGame', dims: [x, y], mines: mines, pass: pass },
 		resp => {
 			gamePasses[resp.id] = pass;
-			game = new ClientGame(resp.id, resp.dims, resp.mines, $gameArea);
+			displayGame(resp, pass);
 		}
 	);
 };
+
+const displayGame = (gameData, pass) => {
+	console.log(pass);
+	currentGame && currentGame.close();
+	currentGame = new ClientGame(
+		gameData.id,
+		gameData.dims,
+		gameData.mines,
+		pass
+	);
+}
 
 const showMsg = msg => {
 	$("#gameInfo").text(msg).show()
 }
 
+/* Send a request to the server; optionally perform an action based on the
+response. */
 const action = (req, respFn) => {
 	/* TODO - proper 'fail' handler, once the server gives proper HTTP codes */
 	$.post('action', JSON.stringify(req), resp => {
@@ -48,46 +80,43 @@ const action = (req, respFn) => {
 	}, 'json');
 };
 
-const ClientGame = function(id, dims, mines, $gameArea) {
+/* Optional 'pass' param if game is controllable */
+const ClientGame = function(id, dims, mines, pass) {
 	const cellState = {
 		UNKNOWN : "u",
 		FLAGGED : "f"
 	}
 
-	new EventSource(`watch?id=${id}&from=0`)
-		.addEventListener('message', (resp) => {
-			const turnNumber = Number(resp.lastEventId);
-			const data = JSON.parse(resp.data);
+	const serverWatcher = new EventSource(`watch?id=${id}&from=0`);
 
-			newTurn(data.newCellData, turnNumber);
-			updateGrid(turnNumber);
-			latestTurn = turnNumber;
+	/*	Non-DOM representation of game state. */
+	const gameGrid = [];
+	/* List of lists of cellDatas, to represent each turn in the game. */
+	const gameTurns = [];
+	let currentTurn = 0;
+	let latestTurn = 0;
+	let gameOver = false;
 
-			if(data.gameOver) {
-				gameOver = true;
-				showMsg(data.win ? "Win!!!1" : "Lose :(((");
-			}
-		});
-
+	/* Add turn new data from server to list & GUI */
 	const newTurn = (data, count) => {
 		gameTurns[count] = data;
 		$("#turnList").append($("<li>")
-			.click(() => { updateGrid(count); })
+			.click(() => { displayTurn(count); })
 			.text("Turn")
 			.attr("value", count)
 		);
 	}
 
-	const updateGrid = newTurnNumber => {
-		const rev = newTurnNumber < currentTurn;
-		const start = (rev ? newTurnNumber : currentTurn) + 1;
-		const end = rev ? currentTurn : newTurnNumber;
+	const displayTurn = newTurnNumber => {
+		const reverse = newTurnNumber < currentTurn;
+		const start = (reverse ? newTurnNumber : currentTurn) + 1;
+		const end = reverse ? currentTurn : newTurnNumber;
 
 		for (let i = start; i <= end; i++) {
 			for (let cellData of gameTurns[i]) {
 				changeState(
 					cellData.coords,
-					rev ? 'unknown' : cellData.state,
+					reverse ? 'unknown' : cellData.state,
 					cellData.surrounding
 				);
 			}
@@ -96,27 +125,15 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		currentTurn = newTurnNumber;
 	}
 
-	if(dims.length !== 2)
-		throw new Error("Only 2d games supported!");
-
-	/*	Non-DOM representation of game state.
-		TOOD: speed-test this versus only recording game state in DOM (i.e. with
-		<td> classes) */
-	const gameGrid = [];
-	/* List of lists of cellDatas, to represent each turn in the game. */
-	const gameTurns = [];
-	let currentTurn = 0;
-	let latestTurn = 0;
-	let gameOver = false;
-
+	/* Perform a turn: send request to server */
 	const clearCells = coordsArr => {
-		if(!gamePasses[id])
+		if(!pass)
 			throw new Error(`Don't have the password for game '${id}'`);
 
 		action({
 			action : 'clearCells',
 			id : id,
-			pass: gamePasses[id],
+			pass: pass,
 			coords : coordsArr
 		});
 	};
@@ -170,9 +187,10 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 	/* Disable user game actions when viewing a past turn, or someone else's
 	game */
 	const inPlayState = () => {
-		return !gameOver && currentTurn === latestTurn && gamePasses[id];
+		return pass && !gameOver && currentTurn === latestTurn;
 	}
 
+	/* Change state of one cell; perform internal data & GUI changes */
 	const changeState = (coords, newStateName, surrCount) => {
 		const states = {
 			flagged : {
@@ -246,7 +264,22 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 		// 	$cell.mouseover();
 	}
 
-	$gameArea.empty();
+	if(dims.length !== 2)
+		throw new Error("Only 2d games supported!");
+
+	serverWatcher.addEventListener('message', (resp) => {
+		const turnNumber = Number(resp.lastEventId);
+		const data = JSON.parse(resp.data);
+
+		newTurn(data.newCellData, turnNumber);
+		displayTurn(turnNumber);
+		latestTurn = turnNumber;
+
+		if(data.gameOver) {
+			gameOver = true;
+			showMsg(data.win ? "Win!!!1" : "Lose :(((");
+		}
+	});
 
 	let $gameTable = $("<table>");
 	$gameArea.append($gameTable);
@@ -259,11 +292,15 @@ const ClientGame = function(id, dims, mines, $gameArea) {
 
 		for(let j = 0; j < dims[1]; j++) {
 			$row.append(
-				$("<td>")
-					.attr('id', cellId([i, j]))
-					.addClass("cell laminate")
+				$("<td>").attr('id', cellId([i, j])).addClass("cell laminate")
 			);
 			changeState([i, j], 'unknown');
 		}
+	}
+
+	this.close = () => {
+		$gameArea.empty();
+		$("#gameInfo").hide();
+		serverWatcher.close();
 	}
 }

@@ -41,11 +41,18 @@ const sseReplayer = (sse, req, resp, next) => {
 }
 
 const gameLister = sse({ history : Infinity });
+gameLister.sendGames = () => {
+	let gameStates = [];
+	for(let id in games)
+		gameStates.push(games[id].gameState());
 
-let gameIds = {};
+	gameLister.send(gameStates);
+}
+
+let games = [];
 
 const getGame = id => {
-	let game = gameIds[id];
+	let game = games[id];
 	if(!game)
 		throw new Error(`unknown game  id: ${JSON.stringify(id)}`);
 	return game;
@@ -95,10 +102,11 @@ const performAction = req => {
 				let id;
 				do { /* Avoid game id collision */
 					id = Math.random().toString(36).substr(2, GAME_ID_LEN);
-				} while(gameIds[id]);
+				} while(games[id]);
 				game = new Game(id, req.pass, req.dims, req.mines);
-				gameIds[id] = game;
-				gameLister.send(game.gameState());
+				games[id] = game;
+				for(let id in games)
+				gameLister.sendGames();
 			}
 		},
 
