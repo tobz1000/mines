@@ -1,5 +1,8 @@
 "use strict";
 
+/* TODO: render latest turn only when switching games, instead of rendering all
+in turn. May need to implement something on the server to retrieve the current
+turn number. */
 /* TODO: store game passwords in cookies */
 /* TODO: prettier game list & turn list; highlight current game/turn */
 
@@ -48,7 +51,6 @@ const newGame = () => {
 };
 
 const displayGame = (gameData, pass) => {
-	console.log(pass);
 	currentGame && currentGame.close();
 	currentGame = new ClientGame(
 		gameData.id,
