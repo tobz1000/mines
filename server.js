@@ -163,7 +163,8 @@ const Game = function(id, pass, dims, mines) {
 	const cellState = {
 		EMPTY: 'empty',
 		MINE: 'mine',
-		CLEARED: 'cleared'
+		CLEARED: 'cleared',
+		UNKNOWN: 'unknown'
 	};
 
 	this.pass = pass;
@@ -299,7 +300,7 @@ const Game = function(id, pass, dims, mines) {
 			if(gameOver || state === cellState.CLEARED)
 				surrounding = this.surroundCount();
 			else
-				state = undefined;
+				state = cellState.UNKNOWN;
 
 			return {
 				coords : coords,
