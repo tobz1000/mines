@@ -280,6 +280,13 @@ const Game = function(id, pass, dims, mines) {
 		//};
 
 		this.uncover = () => {
+			if(this.getState() === cellState.CLEARED)
+				throw new MinesError(
+					"Cell already cleared!",
+					{ coords : coords }
+				)
+
+
 			if(this.getState() === cellState.MINE)
 				gameOver = true;
 
