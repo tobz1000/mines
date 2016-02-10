@@ -126,9 +126,10 @@ class MineZone:
 
 class GameEnd(Exception):
 	def __init__(self, win, msg=None):
-		print("{}".format("Win!!11" if win else "Lose :((("))
 		if msg:
 			print(msg)
+
+		print("{}".format("Win!!11" if win else "Lose :((("))
 
 class Game:
 	id = None
@@ -263,35 +264,34 @@ class Game:
 			for zone in mine_zones:
 				if zone.can_flag:
 					for coords in zone.cells:
-						# print("Flagging {}".format(coords))
 						self.game_grid[coords] = MINE
 						changed = True
 				if zone.can_clear:
 					for coords in zone.cells:
-						# print("Clearing {}".format(coords))
 						self.game_grid[coords] = TO_CLEAR
 						changed = True
 			return changed
 
 		# 3. Substract from zones which fully cover another zone
 		def subtract_subsets():
+			nonlocal mine_zones
 			changed = False
-			for zone, other in itertools.combinations(mine_zones, 2):
-				if len(zone) == 0:
+			for i, j in itertools.combinations(range(len(mine_zones)), 2):
+				if len(mine_zones[i]) == 0 or len(mine_zones[j]) == 0:
 					continue
 
-				if zone == other:
+				if mine_zones[i] == mine_zones[j]:
 					changed = True
-					zone &= other
-					other = MineZone()
+					mine_zones[i] &= mine_zones[j]
+					mine_zones[j] = MineZone()
 
-				elif zone < other:
+				elif mine_zones[i] < mine_zones[j]:
 					changed = True
-					other -= zone
+					mine_zones[j] -= mine_zones[i]
 
-				elif zone > other:
+				elif mine_zones[i] > mine_zones[j]:
 					changed = True
-					zone -= other
+					mine_zones[i] -= mine_zones[j]
 
 			return changed
 
@@ -311,14 +311,17 @@ class Game:
 				i -= 1
 			else:
 				i += 1
-			# print(self.game_grid)
 
 		if (self.game_grid == TO_CLEAR).any():
 			self.clear_cells()
 		else:
 			raise GameEnd(False, "Out of ideas!")
 
-game = Game([7, 7], 3)
-game.first_turn()
-while True:
-	game.turn()
+game = Game([10, 10], 5)
+
+try:
+	game.first_turn()
+	while True:
+		game.turn()
+except GameEnd as e:
+	pass
