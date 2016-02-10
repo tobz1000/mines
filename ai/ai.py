@@ -13,15 +13,16 @@ SERVER_ADDR = "http://localhost:1066"
 # cells
 MINE = -1
 UNKNOWN = -2
+TO_CLEAR = -3
 
 # A grouping of cells with a potential number of mines within them.
 class MineZone:
-	def __init__(self, coords, min_mines, max_mines):
+	def __init__(self, cells=frozenset(), min_mines=0, max_mines=0):
 		if(min_mines > max_mines):
 			raise Exception("Constructed MineZone with greater min_mines than"
-					"max_mines.", self)
+					"max_mines (min={} max={}).".format(min_mines, max_mines))
 
-		self.cells = frozenset(coords)
+		self.cells = cells
 		self.min_mines = max(min_mines, 0)
 		self.max_mines = min(max_mines, len(self.cells))
 		self.fixed = self.min_mines == self.max_mines
@@ -36,13 +37,13 @@ class MineZone:
 		return len(self.cells)
 
 	# maMines/min_mines not considered for equality
-	def __eq__(self):
+	def __eq__(self, other):
 		return self.cells == other.cells
 
-	def __gt__(self):
+	def __gt__(self, other):
 		return self.cells > other.cells
 
-	def __ge__(self):
+	def __ge__(self, other):
 		return self.cells >= other.cells
 
 	def __or__(self, other):
@@ -74,11 +75,11 @@ class MineZone:
 		max_mines = self.max_mines + other.max_mines - len(self.cells &
 				other.cells)
 
-		return MinesZone(self.cells | other.cells, min_mines, max_mines)
+		return MineZone(self.cells | other.cells, min_mines, max_mines)
 
 	def __and__(self, other):
 		if(len(self.cells & other.cells) == 0):
-			return MineZone((), 0, 0)
+			return MineZone()
 
 		if(self == other):
 			return MineZone(
@@ -108,11 +109,11 @@ class MineZone:
 		)
 		max_mines = min(self.max_mines, other.max_mines)
 
-		return MinesZone(self.cells & other.cells, min_mines, max_mines)
+		return MineZone(self.cells & other.cells, min_mines, max_mines)
 
 	def __sub__(self, other):
 		if(self <= other):
-			return MineZone([], 0, 0)
+			return MineZone()
 
 		if(self > other):
 			return MineZone(
@@ -123,48 +124,11 @@ class MineZone:
 
 		return self - (self & other)
 
-# Determine whether a newly transformed list of MineZones is better than old.
-# Priorities:
-# 1. Return any with min == max == 0, or min == max == size
-# 2. From 2 with min == max, to 3 with min == max
-# 3. From either/both min != max, to all with mix == max
-def compare_zone_sets(old, new):
-	def zone_list_union(zone):
-		return functools.reduce(lambda x, y: x | y, zone)
-
-	if zone_list_union(old) != zone_list_union(new):
-		raise Exception("Tried to compare zone sets which cover different "
-				"cells!")
-
-	if any([z.can_flag for z in old]):
-		raise Exception("There are cells to clear before comparing!")
-
-	if any([z.can_clear for z in old]):
-		raise Exception("There are mines to flag before comparing!")
-
-	# Something ready to clear/flag!
-	if any(z.can_flag or z.can_clear for z in new):
-		return True
-
-	# TODO: Not currently doing any evaluation for new a set which isn't fixed;
-	# figure out what should be calculated here.
-	if not all(z.fixed for z in new):
-		return False
-	elif not all(z.fixed for z in old):
-		return True
-
-	# No. of mines in all old & new zones is fixed. New is an improvement if
-	# it's more broken down.
-	if len(new) > len(old):
-		return True
-
-	# TODO: Same number of zones in each set; all set fixed. Not sure what to
-	# do. Maybe keep original and new?
-	return False
-
 class GameEnd(Exception):
-	def __init__(self,  win):
+	def __init__(self, win, msg=None):
 		print("{}".format("Win!!11" if win else "Lose :((("))
+		if msg:
+			print(msg)
 
 class Game:
 	id = None
@@ -174,7 +138,6 @@ class Game:
 	password = "pass"
 	game_over = False
 	win = False
-	mine_zones = None
 
 	def __init__(self, dims, mines):
 		resp = self.action({
@@ -226,30 +189,16 @@ class Game:
 
 		return resp
 
-	def clear_cells(self, coords_arr):
+	def clear_cells(self):
+		coords_list = tuple(c.tolist() for c in
+			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
+		)
+
+		print("Clearing: {}".format(coords_list))
 		self.action({
 			"action": "clearCells",
-			"coords": coords_arr
+			"coords": coords_list
 		})
-
-		print(self.game_grid)
-
-		# Create a MineZone for each cell with mines around
-		self.mine_zones = []
-		for coords in numpy.transpose((self.game_grid > 0).nonzero()):
-			coords = tuple(coords)
-			zone_cells = frozenset([surr for surr in
-					self.get_surrounding(coords) if
-					self.game_grid[surr] == UNKNOWN])
-
-			if len(zone_cells) == 0:
-				continue
-
-			self.mine_zones += [MineZone(zone_cells, self.game_grid[coords],
-					self.game_grid[coords])]
-
-		print("\n".join(map(str, self.mine_zones)))
-
 
 	# Iterator for co-ordinate tuples of all cells in contact with a given cell.
 	def get_surrounding(self, coords):
@@ -267,11 +216,109 @@ class Game:
 			yield surr_coords
 
 
-	def first_turn(self	):
-		def rand_coord(dim):
-			return math.floor(random.random() * self.dims[dim])
+	def first_turn(self):
+		self.game_grid[tuple(
+			math.floor(random.random() * dim) for dim in self.dims
+		)] = TO_CLEAR
 
-		self.clear_cells([[rand_coord(0), rand_coord(1)]])
+		self.clear_cells()
 
-game = Game([4, 4], 3)
+	# If a pass of a state results in a change, go back to the previous stage.
+	# A turn is ready to submit when the final stage passes without a change,
+	# and there is at least one cell set to TO_CLEAR.
+	def turn(self):
+		mine_zones = None
+
+		# 1. Create a MineZone for each cell with mines around
+		def create_zones():
+			nonlocal mine_zones
+			mine_zones = []
+
+			for coords in numpy.transpose((self.game_grid > 0).nonzero()):
+				coords = tuple(coords)
+				zone_cells = frozenset([
+					surr for surr in self.get_surrounding(coords) if
+							self.game_grid[surr] == UNKNOWN
+				])
+
+				known_mines = sum(1 for surr in self.get_surrounding(coords)
+						if self.game_grid[surr] == MINE)
+
+				zone_mines = self.game_grid[coords] - known_mines
+
+				if len(zone_cells) == 0:
+					continue
+
+				mine_zones.append(MineZone(
+					zone_cells,
+					zone_mines,
+					zone_mines
+				))
+
+			return False
+
+		# 2. Check for zones to clear/flag
+		def mark_clear_flag():
+			changed = False
+			for zone in mine_zones:
+				if zone.can_flag:
+					for coords in zone.cells:
+						# print("Flagging {}".format(coords))
+						self.game_grid[coords] = MINE
+						changed = True
+				if zone.can_clear:
+					for coords in zone.cells:
+						# print("Clearing {}".format(coords))
+						self.game_grid[coords] = TO_CLEAR
+						changed = True
+			return changed
+
+		# 3. Substract from zones which fully cover another zone
+		def subtract_subsets():
+			changed = False
+			for zone, other in itertools.combinations(mine_zones, 2):
+				if len(zone) == 0:
+					continue
+
+				if zone == other:
+					changed = True
+					zone &= other
+					other = MineZone()
+
+				elif zone < other:
+					changed = True
+					other -= zone
+
+				elif zone > other:
+					changed = True
+					zone -= other
+
+			return changed
+
+		# 4. Cleverer zone manipulation? (partial overlaps)
+		# 5. Exhaustive test of all possible mine positions in overlapping zones
+
+		stages = [
+			create_zones,
+			mark_clear_flag,
+			subtract_subsets
+		]
+
+		i = 0
+		while i < len(stages):
+			changed = stages[i]()
+			if changed and i > 0:
+				i -= 1
+			else:
+				i += 1
+			# print(self.game_grid)
+
+		if (self.game_grid == TO_CLEAR).any():
+			self.clear_cells()
+		else:
+			raise GameEnd(False, "Out of ideas!")
+
+game = Game([7, 7], 3)
 game.first_turn()
+while True:
+	game.turn()
