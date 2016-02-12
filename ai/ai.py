@@ -16,11 +16,18 @@ UNKNOWN = -2
 TO_CLEAR = -3
 
 # A grouping of cells with a potential number of mines within them.
+# TODO: possibly get rid of min_mines/max_mines; may not be necessary if not
+# splitting overlapping (non-subset) zones. In this case just throw an error if
+# trying to create a MineZone without a definite/fixed number of mines.
 class MineZone:
 	def __init__(self, cells=frozenset(), min_mines=0, max_mines=0):
 		if(min_mines > max_mines):
-			raise Exception("Constructed MineZone with greater min_mines than"
-					"max_mines (min={} max={}).".format(min_mines, max_mines))
+			raise MineZoneErr(
+				cells,
+				min_mines,
+				max_mines,
+				"Constructed MineZone with greater min_mines than max_mines."
+			)
 
 		self.cells = cells
 		self.min_mines = max(min_mines, 0)
@@ -69,9 +76,14 @@ class MineZone:
 		if(self < other):
 			return other | self
 
-		# if neither is a subset of the other, calculate possible mine count
+		# If neither is a subset of the other, calculate possible mine count
 		# range for union
 		min_mines = max(self.min_mines, other.min_mines)
+		# TODO: this is wrong. Consider:
+		# ... 1  2 ...
+		# [ ][ ][ ][ ]
+		# The union should have a fixed number of mines - 2. However the below
+		# formula gives a maximum of 1 (less than the minimum...)
 		max_mines = self.max_mines + other.max_mines - len(self.cells &
 				other.cells)
 
@@ -102,6 +114,7 @@ class MineZone:
 
 		# if neither is a subset of the other, calculate possible mine count
 		# range for intersection
+		# TODO: I think this is wrong - compare with comment on __or__ logic
 		min_mines = max(
 			0,
 			self.min_mines - len(self.cells - other.cells),
@@ -116,13 +129,30 @@ class MineZone:
 			return MineZone()
 
 		if(self > other):
-			return MineZone(
-				self.cells - other.cells,
-				self.min_mines - other.min_mines,
-				self.max_mines - other.max_mines
-			)
+			try:
+				return MineZone(
+					self.cells - other.cells,
+					self.min_mines - other.max_mines,
+					self.max_mines - other.min_mines
+				)
+			except MineZoneErr as e:
+				print("Error while subtracting:\n{}\nminus:\n{}".format(
+					self, other
+				))
+				raise
 
 		return self - (self & other)
+
+class MineZoneErr(Exception):
+	def __init__(self, cells, min_mines, max_mines, msg=None):
+		self.cells = cells
+		self.min_mines = min_mines
+		self.max_mines = max_mines
+
+		if msg:
+			print(msg)
+		print("cells={}; min_mines={}; max_mines={}".format(cells, min_mines,
+				max_mines))
 
 class GameEnd(Exception):
 	def __init__(self, win, msg=None):
@@ -153,6 +183,8 @@ class Game:
 
 		self.game_grid = numpy.ndarray(dims, dtype=int)
 		self.game_grid.fill(UNKNOWN)
+
+		print("New game: id \"{}\"".format(self.id))
 
 	def action(self, params):
 		if self.id:
@@ -295,19 +327,103 @@ class Game:
 
 			return changed
 
-		# 4. Cleverer zone manipulation? (partial overlaps)
+		# TODO:
+		# If the combination of two zones has fixed mine count, add it to
+		# mine_zones.
+		def combine_overlaps():
+			pass
+
+		# 4. Split each overlapping zone
+		# TODO: This stage hasn't seemed to achieved any additional clearings so
+		# far. Possibly should be removed.
+		def split_overlaps():
+			nonlocal mine_zones
+			changed = False
+
+			for i, j in itertools.combinations(range(len(mine_zones)), 2):
+				# if not mine_zones[i].fixed or not mine_zones[j].fixed:
+				# 	continue
+
+				if len(mine_zones[i] & mine_zones[j]) == 0:
+					continue
+
+				if (
+					mine_zones[i] < mine_zones[j] or
+					mine_zones[i] == mine_zones[j] or
+					mine_zones[i] > mine_zones[j]
+				):
+					continue
+
+				split_zones = [
+					mine_zones[j] - mine_zones[i],
+					mine_zones[i] -  mine_zones[j],
+					mine_zones[i] & mine_zones[j]
+				]
+
+				# print("removing:\n{}\n{};".format(mine_zones[i], mine_zones[j]))
+				# print("adding:\n{}".format('\n'.join(map(str, split_zones))))
+
+				changed = True
+				mine_zones[i] = MineZone()
+				mine_zones[j] = MineZone()
+				mine_zones += (split_zones)
+
 		# 5. Exhaustive test of all possible mine positions in overlapping zones
+		# TODO: find elegant way to go back to first stage after a change here,
+		# instead of back to previous stage.
+		def exhaustive_zone_test():
+			nonlocal mine_zones
+			changed = False
+			for i, j in itertools.combinations(range(len(mine_zones)), 2):
+				if not mine_zones[i].fixed or not mine_zones[j].fixed:
+					continue
+
+				# print("Exaustive test:\n{}\n{}".format(mine_zones[i],
+				# 		mine_zones[j]))
+
+				test_cells = mine_zones[i].cells | mine_zones[j].cells
+				valid_mine_patterns = []
+
+				# Try every combination of cells as mines
+				for n in range(1, len(test_cells) + 1):
+					for test_mines in itertools.combinations(test_cells, n):
+						test_mines = frozenset(test_mines)
+						pattern_valid = True
+						# Check whether no. of mines is correct for both zones
+						for zone in (mine_zones[i], mine_zones[j]):
+							if len(test_mines & zone.cells) != zone.min_mines:
+								pattern_valid = False
+								break
+
+						if pattern_valid:
+							valid_mine_patterns.append(test_mines)
+
+				# print("valid patterns: {}".format(valid_mine_patterns))
+				for cell in test_cells:
+					if all(cell not in pattern for pattern in
+							valid_mine_patterns):
+						self.game_grid[cell] = TO_CLEAR
+					elif all(cell in pattern for pattern in
+							valid_mine_patterns):
+						self.game_grid[cell] = MINE
+
+			return changed
 
 		stages = [
 			create_zones,
-			mark_clear_flag,
-			subtract_subsets
+			# mark_clear_flag,
+			# subtract_subsets,
+			# combine_overlaps,
+			# split_overlaps,
+			exhaustive_zone_test
 		]
 
 		i = 0
 		while i < len(stages):
 			changed = stages[i]()
 			if changed and i > 0:
+				if i == 3:
+					print("split something!")
 				i -= 1
 			else:
 				i += 1
@@ -317,7 +433,7 @@ class Game:
 		else:
 			raise GameEnd(False, "Out of ideas!")
 
-game = Game([10, 10], 5)
+game = Game([30, 40], 100)
 
 try:
 	game.first_turn()

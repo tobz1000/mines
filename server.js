@@ -73,9 +73,12 @@ const postResponse = (req, resp) => {
 		} catch(e) {
 			if(e instanceof SyntaxError)
 				responseObj = { error: "malformed JSON request data" };
-			else if (e instanceof MinesError)
+			else if (e instanceof MinesError) {
 				responseObj = e;
-			else {
+				console.log(
+					`Problem with client request: ${JSON.stringify(e)}`
+				);
+			} else {
 				console.error(`Unhandled error: ${e.stack}`);
 				responseObj = { error: "unknown error" };
 			}
@@ -168,14 +171,8 @@ const Game = function(id, pass, dims, mines) {
 	};
 
 	this.pass = pass;
-	const size = dims.reduce((x, y) => x * y);
+	const size = dims.reduce((a, b) => a * b);
 	const max_mines = size - 1;
-
-	if(mines % 1 !== 0 || mines < 1)
-		throw new MinesError(
-			`invalid number of mines specified (${mines})`,
-			{ min_mines : 1, max_mines : max_mines }
-		);
 
 	if (mines > max_mines)
 		throw new MinesError("too many mines!", {
@@ -280,13 +277,6 @@ const Game = function(id, pass, dims, mines) {
 		//};
 
 		this.uncover = () => {
-			if(this.getState() === cellState.CLEARED)
-				throw new MinesError(
-					"Cell already cleared!",
-					{ coords : coords }
-				)
-
-
 			if(this.getState() === cellState.MINE)
 				gameOver = true;
 
