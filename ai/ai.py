@@ -373,7 +373,6 @@ class Game:
 		# instead of back to previous stage.
 		def exhaustive_zone_test():
 			nonlocal mine_zones
-			changed = False
 			for i, j in itertools.combinations(range(len(mine_zones)), 2):
 				if not mine_zones[i].fixed or not mine_zones[j].fixed:
 					continue
@@ -407,23 +406,34 @@ class Game:
 							valid_mine_patterns):
 						self.game_grid[cell] = MINE
 
-			return changed
+			return False
 
 		stages = [
-			create_zones,
-			mark_clear_flag,
-			# subtract_subsets,
-			# combine_overlaps,
-			# split_overlaps,
-			exhaustive_zone_test
+			[
+				create_zones,
+				mark_clear_flag,
+				# subtract_subsets,
+				# combine_overlaps,
+				# split_overlaps,
+				# exhaustive_zone_test
+			],
+			[
+				exhaustive_zone_test
+			]
 		]
 
 		i = 0
+		j = 0
 		while i < len(stages):
-			changed = stages[i]()
-			if changed and i > 0:
-				if i == 3:
-					print("split something!")
+			any_changed = False
+			while j < len(stages[i]):
+				changed = stages[i][j]()
+				any_changed = any_changed or changed
+				if changed and j > 0:
+					j -= 1
+				else:
+					j += 1
+			if any_changed and i > 0:
 				i -= 1
 			else:
 				i += 1
@@ -433,7 +443,7 @@ class Game:
 		else:
 			raise GameEnd(False, "Out of ideas!")
 
-game = Game([40, 40], 100)
+game = Game([80, 80], 400)
 
 try:
 	game.first_turn()
