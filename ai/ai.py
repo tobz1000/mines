@@ -411,7 +411,7 @@ class Game:
 
 		stages = [
 			create_zones,
-			# mark_clear_flag,
+			mark_clear_flag,
 			# subtract_subsets,
 			# combine_overlaps,
 			# split_overlaps,
@@ -433,7 +433,7 @@ class Game:
 		else:
 			raise GameEnd(False, "Out of ideas!")
 
-game = Game([30, 40], 100)
+game = Game([40, 40], 100)
 
 try:
 	game.first_turn()
