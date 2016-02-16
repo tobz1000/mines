@@ -408,35 +408,30 @@ class Game:
 
 			return False
 
-		stages = [
-			[
-				create_zones,
-				mark_clear_flag,
-				# subtract_subsets,
-				# combine_overlaps,
-				# split_overlaps,
-				# exhaustive_zone_test
-			],
-			[
-				exhaustive_zone_test
-			]
-		]
+		# Recursive function to allow more flexible control flows. The provided
+		# list of stages are performed in order, with the previous stage being
+		# revisited if something changes. A stage can be a single function or
+		# a nested list of stages.
+		def perform_stages(stage):
+			if callable(stage):
+				return stage()
 
-		i = 0
-		j = 0
-		while i < len(stages):
-			any_changed = False
-			while j < len(stages[i]):
-				changed = stages[i][j]()
-				any_changed = any_changed or changed
-				if changed and j > 0:
-					j -= 1
-				else:
-					j += 1
-			if any_changed and i > 0:
-				i -= 1
-			else:
-				i += 1
+			i = 0
+			changed = False
+			while i < len(stage):
+				increment = 1
+				if perform_stages(stage[i]):
+					changed = True
+					# Go back to previous set on change, if possible
+					if i > 0:
+						increment = -1
+				i += increment
+			return changed
+
+		stages1 = [ create_zones, mark_clear_flag, exhaustive_zone_test ]
+		stages2 = [ [ create_zones, mark_clear_flag], [ exhaustive_zone_test ] ]
+
+		perform_stages(stages1)
 
 		if (self.game_grid == TO_CLEAR).any():
 			self.clear_cells()
