@@ -155,11 +155,13 @@ class MineZoneErr(Exception):
 				max_mines))
 
 class GameEnd(Exception):
-	def __init__(self, win, msg=None):
+	def __init__(self, game, msg=None):
 		if msg:
 			print(msg)
 
-		print("{}".format("Win!!11" if win else "Lose :((("))
+		print("{}".format("Win!!11" if game.win else "Lose :((("))
+		print("Turns hash sum: {}".format(game.turns_hash_sum))
+		print("="*50)
 
 class Game:
 	id = None
@@ -169,6 +171,7 @@ class Game:
 	password = "pass"
 	game_over = False
 	win = False
+	turns_hash_sum = 0
 
 	def __init__(self, dims=None, mines=None, reload_id=None):
 		if(dims and mines):
@@ -216,7 +219,7 @@ class Game:
 		self.win = resp["win"]
 
 		if self.game_over:
-			raise GameEnd(self.win)
+			raise GameEnd(self)
 
 		self.cells_rem = resp["cellsRem"]
 
@@ -235,10 +238,14 @@ class Game:
 			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
 		)
 
-		print("Clearing {} cells (hash {})".format(
+		coords_hash = hash(coords_list)
+
+		print("Clearing {:3} cells (hash {})".format(
 			len(coords_list),
-			hash(coords_list)
+			coords_hash
 		))
+
+		self.turns_hash_sum += coords_hash
 
 		self.action({
 			"action": "clearCells",
@@ -425,6 +432,10 @@ class Game:
 			return False
 
 		strategy = {
+			"strat0" : [
+				create_zones,
+				exhaustive_zone_test
+			],
 			"strat1" : [
 				create_zones,
 				mark_clear_flag,
@@ -464,7 +475,7 @@ class Game:
 		if (self.game_grid == TO_CLEAR).any():
 			self.clear_cells()
 		else:
-			raise GameEnd(False, "Out of ideas!")
+			raise GameEnd(self, "Out of ideas!")
 
 def play_game(game, strategy_name):
 	try:
@@ -476,6 +487,8 @@ def play_game(game, strategy_name):
 	return game.id
 
 game = Game([20, 20], 50)
-play_game(game, "strat1")
+play_game(game, "strat0")
+game_repeat = Game(reload_id=game.id)
+play_game(game_repeat, "strat1")
 game_repeat = Game(reload_id=game.id)
 play_game(game_repeat, "strat2")
