@@ -5,13 +5,14 @@ const _ = require('underscore');
 const nd = require('ndarray');
 require('coffee-script/register');
 const ty = require('assert-type');
+const fs = require('fs');
 
 const GAME_ID_LEN = 5;
 const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
-const TY_DIMS = ty.arr.of([ty.int.pos,ty.int.pos]);
-const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.of([ty.int.nonneg,ty.int.nonneg]));
+const TY_DIMS = ty.arr.of([ty.int.pos, ty.int.pos]);
+const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.of([ty.int.nonneg, ty.int.nonneg]));
 
 const MinesError = function(error, info) {
 	this.error = error;
@@ -54,7 +55,7 @@ let games = [];
 const getGame = id => {
 	let game = games[id];
 	if(!game)
-		throw new Error(`unknown game  id: ${JSON.stringify(id)}`);
+		throw new Error(`unknown game id: "${id}"`);
 	return game;
 };
 
@@ -88,10 +89,44 @@ const postResponse = (req, resp) => {
 	});
 };
 
+/* TODO: actual db. */
+const db = {
+	save : (gameState) => {
+		fs.writeFile(`saves/${gameState.id}`, JSON.stringify(gameState));
+	},
+	load : (id) => {
+		return JSON.parse(fs.readFileSync(`saves/${id}`))
+	}
+};
+
 /* Performs the action requested by a player. Returns the gameState, and
 broadcasts it. */
 const performAction = req => {
 	let actionName, gameAction, game;
+
+	const newGameId = () => {
+		let id;
+		do { /* Avoid game id collision */
+			id = Math.random().toString(36).substr(2, GAME_ID_LEN);
+		} while(games[id]);
+		return id;
+	}
+
+	/* Construct a Game and perform initialisation tasks */
+	const registerGame = (id, pass, dims, mines, gridArray) => {
+		if(games[id])
+			throw new Error(`Tried to overwrite game id: "${id}"`);
+		game = new Game(id, pass, dims, mines, gridArray);
+
+		/* Save initial state to db to play again */
+		db.save(game.gameState({ showGridArray: true }));
+
+		/* Add to list of currently active games */
+		games[id] = game;
+
+		/* Update broadcasted list of games */
+		gameLister.sendGames();
+	}
 
 	/* TODO: These can probably inherit a base GameAction class? */
 	const actions = {
@@ -102,14 +137,12 @@ const performAction = req => {
 				pass : ty.str.ne
 			}),
 			func : () => {
-				let id;
-				do { /* Avoid game id collision */
-					id = Math.random().toString(36).substr(2, GAME_ID_LEN);
-				} while(games[id]);
-				game = new Game(id, req.pass, req.dims, req.mines);
-				games[id] = game;
-				for(let id in games)
-				gameLister.sendGames();
+				registerGame(
+					newGameId(),
+					req.pass,
+					req.dims,
+					req.mines
+				);
 			}
 		},
 
@@ -124,6 +157,28 @@ const performAction = req => {
 				if(game.pass !== req.pass)
 					throw new MinesError("Incorrect password!");
 				game.clearCells(req.coords);
+			}
+		},
+
+		/* TODO:
+			optional game constructor param for initial board/mine positions;
+			game.dump(): save dims and initial board/mine positions;
+			saveGameParams();
+			loadGameParams();
+		probably save to file(s) at first; look at a db eventually */
+		loadGame : {
+			paramChecks : ty.obj.with({
+				id : ty.str.ne
+			}),
+			func : () => {
+				const params = db.load(req.id);
+				registerGame(
+					newGameId(),
+					req.pass,
+					params.dims,
+					params.mines,
+					params.gridArray
+				);
 			}
 		}
 	};
@@ -157,12 +212,12 @@ const performAction = req => {
 		else throw e;
 	}
 	gameAction.func();
-	const gameState = game.gameState();
+	const gameState = game.gameState({ showLastCells: true });
 	game.broadcaster.send(gameState);
 	return gameState;
 }
 
-const Game = function(id, pass, dims, mines) {
+const Game = function(id, pass, dims, mines, gridArray) {
 	const cellState = {
 		EMPTY: 'empty',
 		MINE: 'mine',
@@ -187,10 +242,11 @@ const Game = function(id, pass, dims, mines) {
 	/* Information about the last cell(s) cleared */
 	let lastUserCells = [];
 
-	const gameGrid = nd(_.shuffle(new Array(size)
+	gridArray = gridArray || _.shuffle(new Array(size)
 		.fill(cellState.MINE, 0, mines)
 		.fill(cellState.EMPTY, mines, size)
-	), dims);
+	)
+	const gameGrid = nd(gridArray, dims);
 
 	/* multi-dim version - broken. */
 	// const surroundingCoords = function*() {
@@ -309,19 +365,29 @@ const Game = function(id, pass, dims, mines) {
 
 	this.broadcaster = sse({ history : Infinity });
 
-	/*	Returns info to be seen by user (when there are no errors), and resets
-		lastUserCells for next turn. */
-	this.gameState = verbose => {
+	/*	Returns game info for the user or database. */
+	/* TODO: default parameters not working in Node :( */
+	this.gameState = (options) => {
+		options = options || {}
 		let state = {
 			id : id,
 			gameOver : gameOver,
 			win : win,
 			dims : dims,
 			mines : mines,
-			cellsRem : cellsRem,
-			newCellData : lastUserCells
+			cellsRem : cellsRem
 		};
-		lastUserCells = [];
+
+		/* Clear lastUserCells after sending. */
+		if(options.showLastCells) {
+			state.newCellData = lastUserCells;
+			lastUserCells = [];
+		}
+
+		if(options.showGridArray) {
+			state.gridArray = gameGrid.data;
+		}
+
 		return state;
 	};
 

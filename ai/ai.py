@@ -170,18 +170,26 @@ class Game:
 	game_over = False
 	win = False
 
-	def __init__(self, dims, mines):
-		resp = self.action({
-			"action": "newGame",
-			"dims": dims,
-			"mines": mines
-		})
+	def __init__(self, dims=None, mines=None, reload_id=None):
+		if(dims and mines):
+			resp = self.action({
+				"action": "newGame",
+				"dims": dims,
+				"mines": mines
+			})
+		elif(reload_id):
+			resp = self.action({
+				"action": "loadGame",
+				"id": reload_id
+			})
+		else:
+			raise Exception("Insufficient game parameters")
 
 		self.dims = resp["dims"]
 		self.mines = resp["mines"]
 		self.id = resp["id"]
 
-		self.game_grid = numpy.ndarray(dims, dtype=int)
+		self.game_grid = numpy.ndarray(self.dims, dtype=int)
 		self.game_grid.fill(UNKNOWN)
 
 		print("New game: id \"{}\"".format(self.id))
@@ -223,11 +231,15 @@ class Game:
 		return resp
 
 	def clear_cells(self):
-		coords_list = tuple(c.tolist() for c in
+		coords_list = tuple(tuple(c.tolist()) for c in
 			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
 		)
 
-		print("Clearing: {}".format(coords_list))
+		print("Clearing {} cells (hash {})".format(
+			len(coords_list),
+			hash(coords_list)
+		))
+
 		self.action({
 			"action": "clearCells",
 			"coords": coords_list
@@ -248,18 +260,22 @@ class Game:
 
 			yield surr_coords
 
+	def first_turn(self, coords=None):
+		if coords == None:
+			coords = tuple(
+				math.floor(random.random() * dim) for dim in self.dims
+			)
 
-	def first_turn(self):
-		self.game_grid[tuple(
-			math.floor(random.random() * dim) for dim in self.dims
-		)] = TO_CLEAR
+		if coords == 0:
+			coords = (0,) * len(self.dims)
 
+		self.game_grid[coords] = TO_CLEAR
 		self.clear_cells()
 
 	# If a pass of a state results in a change, go back to the previous stage.
 	# A turn is ready to submit when the final stage passes without a change,
 	# and there is at least one cell set to TO_CLEAR.
-	def turn(self):
+	def turn(self, strategy_name):
 		mine_zones = None
 
 		# 1. Create a MineZone for each cell with mines around
@@ -408,6 +424,21 @@ class Game:
 
 			return False
 
+		strategy = {
+			"strat1" : [
+				create_zones,
+				mark_clear_flag,
+				exhaustive_zone_test
+			],
+			"strat2" : [
+				[
+					create_zones,
+					mark_clear_flag
+				],
+				exhaustive_zone_test
+			]
+		}[strategy_name]
+
 		# Recursive function to allow more flexible control flows. The provided
 		# list of stages are performed in order, with the previous stage being
 		# revisited if something changes. A stage can be a single function or
@@ -428,21 +459,23 @@ class Game:
 				i += increment
 			return changed
 
-		stages1 = [ create_zones, mark_clear_flag, exhaustive_zone_test ]
-		stages2 = [ [ create_zones, mark_clear_flag], [ exhaustive_zone_test ] ]
-
-		perform_stages(stages1)
+		perform_stages(strategy)
 
 		if (self.game_grid == TO_CLEAR).any():
 			self.clear_cells()
 		else:
 			raise GameEnd(False, "Out of ideas!")
 
-game = Game([80, 80], 400)
+def play_game(game, strategy_name):
+	try:
+		game.first_turn(0)
+		while True:
+			game.turn(strategy_name)
+	except GameEnd as e:
+		pass
+	return game.id
 
-try:
-	game.first_turn()
-	while True:
-		game.turn()
-except GameEnd as e:
-	pass
+game = Game([20, 20], 50)
+play_game(game, "strat1")
+game_repeat = Game(reload_id=game.id)
+play_game(game_repeat, "strat2")
