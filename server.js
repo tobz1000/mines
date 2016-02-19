@@ -380,42 +380,25 @@ const Game = function(id, pass, dims, mines, gridArray) {
 		return state;
 	};
 
-	/* TODO: recursive clearSurroundingRec->clearCellsRec causes stack overflow
-	for large areas with no mines */
 	/* TODO: if the player loses, add all mines to lastUserCells */
 	this.clearCells = coordsArr => {
-		const clearCellsRec = coordsArr => {
-			if(gameOver)
-				throw new MinesError("game over!");
+		if(gameOver)
+			throw new MinesError("Game over!");
 
-			for(let coords of coordsArr) {
-				let cell = new Cell(coords);
-				cell.uncover();
+		let coords;
+		while(coords = coordsArr.pop()) {
+			let cell = new Cell(coords);
+			cell.uncover();
 
-				lastUserCells.push(cell.userCell());
-				if(cell.surroundCount() === 0)
-					clearSurroundingRec(coords);
+			lastUserCells.push(cell.userCell());
+			if(cell.surroundCount() === 0) {
+				for(let surrCoords of surroundingCoords(coords)) {
+					/* TODO: make getState() callable statically, with coords as
+					params. */
+					if(new Cell(surrCoords).getState() !== cellState.CLEARED)
+						coordsArr.push(surrCoords);
+				}
 			}
-		}
-
-		const clearSurroundingRec = coords => {
-			for(let surrCoords of surroundingCoords(coords)) {
-				if(gameOver)
-					break;
-
-				/* TODO: make getState() callable statically, with coords as params. */
-				if(new Cell(surrCoords).getState() !== cellState.CLEARED)
-					clearCellsRec([surrCoords]);
-			}
-		}
-
-		try {
-			clearCellsRec(coordsArr);
-		} catch(e) {
-			if(e instanceof RangeError)
-				console.error("Stack overflow - too many zero-cells!");
-			else
-				throw e;
 		}
 	}
 }
