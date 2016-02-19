@@ -6,6 +6,7 @@ import math
 import numpy
 import functools
 import itertools
+import time
 
 SERVER_ADDR = "http://localhost:1066"
 
@@ -156,11 +157,18 @@ class MineZoneErr(Exception):
 
 class GameEnd(Exception):
 	def __init__(self, game, msg=None):
+		end_time = time.time()
+
+		print()
+
 		if msg:
 			print(msg)
 
+		turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
+
 		print("{}".format("Win!!11" if game.win else "Lose :((("))
-		print("Turns hash sum: {}".format(game.turns_hash_sum))
+		print("Turns id: {}".format(turns_id))
+		print("Time elapsed: {:.5}s".format(end_time - game.start_time))
 		print("="*50)
 
 class Game:
@@ -172,6 +180,7 @@ class Game:
 	game_over = False
 	win = False
 	turns_hash_sum = 0
+	start_time = None
 
 	def __init__(self, dims=None, mines=None, reload_id=None):
 		if(dims and mines):
@@ -195,7 +204,12 @@ class Game:
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)
 		self.game_grid.fill(UNKNOWN)
 
-		print("New game: id \"{}\"".format(self.id))
+		print("New game: {} (original {}) dims: {} mines: {}".format(
+			self.id,
+			reload_id or self.id,
+			self.dims,
+			self.mines
+		))
 
 	def action(self, params):
 		if self.id:
@@ -238,14 +252,9 @@ class Game:
 			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
 		)
 
-		coords_hash = hash(coords_list)
+		print(" {}".format(len(coords_list)), end='', flush=True)
 
-		print("Clearing {:3} cells (hash {})".format(
-			len(coords_list),
-			coords_hash
-		))
-
-		self.turns_hash_sum += coords_hash
+		self.turns_hash_sum += hash(coords_list)
 
 		self.action({
 			"action": "clearCells",
@@ -268,6 +277,7 @@ class Game:
 			yield surr_coords
 
 	def first_turn(self, coords=None):
+		self.start_time = time.time()
 		if coords == None:
 			coords = tuple(
 				math.floor(random.random() * dim) for dim in self.dims
@@ -276,6 +286,7 @@ class Game:
 		if coords == 0:
 			coords = (0,) * len(self.dims)
 
+		print("Clearing...", end='', flush=True)
 		self.game_grid[coords] = TO_CLEAR
 		self.clear_cells()
 
@@ -400,9 +411,6 @@ class Game:
 				if not mine_zones[i].fixed or not mine_zones[j].fixed:
 					continue
 
-				# print("Exaustive test:\n{}\n{}".format(mine_zones[i],
-				# 		mine_zones[j]))
-
 				test_cells = mine_zones[i].cells | mine_zones[j].cells
 				valid_mine_patterns = []
 
@@ -434,20 +442,15 @@ class Game:
 		strategy = {
 			"strat0" : [
 				create_zones,
+				mark_clear_flag,
 				exhaustive_zone_test
 			],
 			"strat1" : [
 				create_zones,
 				mark_clear_flag,
+				subtract_subsets,
 				exhaustive_zone_test
 			],
-			"strat2" : [
-				[
-					create_zones,
-					mark_clear_flag
-				],
-				exhaustive_zone_test
-			]
 		}[strategy_name]
 
 		# Recursive function to allow more flexible control flows. The provided
@@ -486,9 +489,10 @@ def play_game(game, strategy_name):
 		pass
 	return game.id
 
-game = Game([20, 20], 50)
-play_game(game, "strat0")
-game_repeat = Game(reload_id=game.id)
-play_game(game_repeat, "strat1")
-game_repeat = Game(reload_id=game.id)
-play_game(game_repeat, "strat2")
+def play_all_strategies(dims, mines):
+	game = Game(dims, mines)
+	play_game(game, "strat0")
+	game_repeat = Game(reload_id=game.id)
+	play_game(game_repeat, "strat1")
+
+play_all_strategies([100, 100], 100)
