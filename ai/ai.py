@@ -495,4 +495,4 @@ def play_all_strategies(dims, mines):
 	game_repeat = Game(reload_id=game.id)
 	play_game(game_repeat, "strat1")
 
-play_all_strategies([20, 20], 50)
+play_all_strategies([80, 80], 500)

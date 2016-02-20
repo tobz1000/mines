@@ -91,7 +91,7 @@ const ClientGame = function(id, dims, mines, pass) {
 
 	const serverWatcher = new EventSource(`watch?id=${id}&from=0`);
 
-	/*	Non-DOM representation of game state. */
+	/* Representation of game state; each cell is a 'GameCell'. */
 	const gameGrid = [];
 	/* List of lists of cellDatas, to represent each turn in the game. */
 	const gameTurns = [];
@@ -110,20 +110,21 @@ const ClientGame = function(id, dims, mines, pass) {
 	}
 
 	const displayTurn = newTurnNumber => {
+		$gameTable.detach();
 		const reverse = newTurnNumber < currentTurn;
 		const start = (reverse ? newTurnNumber : currentTurn) + 1;
 		const end = reverse ? currentTurn : newTurnNumber;
 
 		for (let i = start; i <= end; i++) {
 			for (let cellData of gameTurns[i]) {
-				changeState(
-					cellData.coords,
+				gameGrid[cellData.coords[0]][cellData.coords[1]].changeState(
 					reverse ? 'unknown' : cellData.state,
 					cellData.surrounding
 				);
 			}
 		}
 
+		$gameArea.prepend($gameTable);
 		currentTurn = newTurnNumber;
 	}
 
@@ -153,7 +154,7 @@ const ClientGame = function(id, dims, mines, pass) {
 				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
 					continue;
 
-				if(gameGrid[x][y] !== cellState.UNKNOWN)
+				if(gameGrid[x][y].state !== cellState.UNKNOWN)
 					continue;
 
 				ret.push([x, y]);
@@ -192,79 +193,82 @@ const ClientGame = function(id, dims, mines, pass) {
 		return pass && !gameOver && currentTurn === latestTurn;
 	}
 
-	/* Change state of one cell; perform internal data & GUI changes */
-	const changeState = (coords, newStateName, surrCount) => {
-		const states = {
-			flagged : {
-				gridState : cellState.FLAGGED,
-				class : 'cellFlagged',
-				contextmenu : () => { changeState(coords, 'unknown'); },
-			},
-			mine : {
-				class : 'cellMine'
-			},
-			unknown : {
-				gridState : cellState.UNKNOWN,
-				class : 'cellUnknown',
-				click : () => { clearCells([coords]); },
-				contextmenu : () => { changeState(coords, 'flagged'); },
-				mouseover : () => { $getCell(coords).addClass('cellHover'); },
-				mouseout : () => { $getCell(coords).removeClass('cellHover'); }
-			},
-			cleared : {
-				gridState : surrCount,
-				class : 'cellCleared',
-				text : surrCount > 0 ? surrCount : undefined,
-				click : surrCount > 0 ?
-					() => { clearSurrounding(coords); } : undefined,
-				mouseover : surrCount > 0 ?
-					() => { hoverSurrounding(coords, true); } : undefined,
-				mouseout : surrCount > 0 ?
-					() => { hoverSurrounding(coords, false); } : undefined
+	const GameCell = function(coords) {
+		this.$elm = $("<td>").addClass("cell laminate");
+		/* Change state of one cell; perform internal data & GUI changes */
+		this.changeState = (newStateName, surrCount) => {
+			const states = {
+				flagged : {
+					cellState : cellState.FLAGGED,
+					class : 'cellFlagged',
+					contextmenu : () => { this.changeState('unknown'); },
+				},
+				mine : {
+					class : 'cellMine'
+				},
+				unknown : {
+					cellState : cellState.UNKNOWN,
+					class : 'cellUnknown',
+					click : () => { clearCells([coords]); },
+					contextmenu : () => { this.changeState('flagged'); },
+					mouseover : () => { this.$elm.addClass('cellHover'); },
+					mouseout : () => { this.$elm.removeClass('cellHover'); }
+				},
+				cleared : {
+					cellState : surrCount,
+					class : 'cellCleared',
+					text : surrCount > 0 ? surrCount : undefined,
+					click : surrCount > 0 ?
+						() => { clearSurrounding(coords); } : undefined,
+					mouseover : surrCount > 0 ?
+						() => { hoverSurrounding(coords, true); } : undefined,
+					mouseout : surrCount > 0 ?
+						() => { hoverSurrounding(coords, false); } : undefined
+				}
+			};
+
+			const newState = states[newStateName];
+			if(!newState)
+				throw new Error(`unexpected cell state: "${newStateName}"`);
+
+			/* Reverse any current mouseover effect */
+			this.$elm.mouseout();
+			this.$elm.off();
+			this.$elm.text("");
+
+			for(const s in states)
+				if(s !== newStateName && states[s].class)
+					this.$elm.removeClass(states[s].class);
+
+			this.state = newState.cellState;
+			this.$elm.addClass(newState.class);
+			this.$elm.text(newState.text);
+
+			/* Apply mouse actions to cell */
+			for (let mouseAction of [
+				'click',
+				'contextmenu',
+				'mouseover',
+				'mouseout',
+				'mouseup'
+			]) {
+				if(newState[mouseAction]) {
+					this.$elm.on(mouseAction, () => {
+						if(inPlayState())
+							newState[mouseAction]();
+					});
+				}
 			}
+
+			/* TODO: this is meant to highlight surrounding cells right after
+			clicking an unknown cell. Doesn't work (:hover is false); don't know
+			why. */
+			// if(this.$elm.is(":hover"))
+			// 	this.$elm.mouseover();
 		};
 
-		const newState = states[newStateName];
-		if(!newState)
-			throw new Error(`unexpected cell state: "${newStateName}"`);
-
-		const $cell = $getCell(coords);
-
-		/* Reverse any current mouseover effect */
-		$cell.mouseout();
-		$cell.off();
-		$cell.text("");
-
-		for(const s in states)
-			if(s !== newStateName && states[s].class)
-				$cell.removeClass(states[s].class);
-
-		gameGrid[coords[0]][coords[1]] = newState.gridState;
-		$cell.addClass(newState.class);
-		$cell.text(newState.text);
-
-		/* Apply mouse actions to cell */
-		for (let mouseAction of [
-			'click',
-			'contextmenu',
-			'mouseover',
-			'mouseout',
-			'mouseup'
-		]) {
-			if(newState[mouseAction]) {
-				$cell.on(mouseAction, () => {
-					if(inPlayState())
-						newState[mouseAction]();
-				});
-			}
-		}
-
-		/* TODO: this is meant to highlight surrounding cells right after
-		clicking an unknown cell. Doesn't work (:hover is false); don't know
-		why. */
-		// if($cell.is(":hover"))
-		// 	$cell.mouseover();
-	}
+		this.changeState('unknown');
+	};
 
 	if(dims.length !== 2)
 		throw new Error("Only 2d games supported!");
@@ -285,21 +289,18 @@ const ClientGame = function(id, dims, mines, pass) {
 
 	let $gameTable = $("<table>");
 
-	$gameArea.append($gameTable);
-	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
-
 	for(let i = 0; i < dims[0]; i++) {
 		gameGrid[i] = [];
 		let $row = $("<tr>");
 		$gameTable.append($row);
 
 		for(let j = 0; j < dims[1]; j++) {
-			$row.append(
-				$("<td>").attr('id', cellId([i, j])).addClass("cell laminate")
-			);
-			changeState([i, j], 'unknown');
+			gameGrid[i][j] = new GameCell([i, j]);
+			$row.append(gameGrid[i][j].$elm);
 		}
 	}
+
+	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
 
 	this.close = () => {
 		$gameArea.empty();
