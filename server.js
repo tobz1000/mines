@@ -388,15 +388,15 @@ const Game = function(id, pass, dims, mines, gridArray) {
 		let coords;
 		while(coords = coordsArr.pop()) {
 			let cell = new Cell(coords);
+			if(cell.getState() === cellState.CLEARED)
+				continue;
+
 			cell.uncover();
 
 			lastUserCells.push(cell.userCell());
 			if(cell.surroundCount() === 0) {
 				for(let surrCoords of surroundingCoords(coords)) {
-					/* TODO: make getState() callable statically, with coords as
-					params. */
-					if(new Cell(surrCoords).getState() !== cellState.CLEARED)
-						coordsArr.push(surrCoords);
+					coordsArr.push(surrCoords);
 				}
 			}
 		}

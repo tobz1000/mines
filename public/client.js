@@ -259,7 +259,7 @@ const ClientGame = function(id, dims, mines, pass) {
 			}
 		}
 
-		/* TODO: this is to meant to highlight surrounding cells right after
+		/* TODO: this is meant to highlight surrounding cells right after
 		clicking an unknown cell. Doesn't work (:hover is false); don't know
 		why. */
 		// if($cell.is(":hover"))
@@ -284,6 +284,7 @@ const ClientGame = function(id, dims, mines, pass) {
 	});
 
 	let $gameTable = $("<table>");
+
 	$gameArea.append($gameTable);
 	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
 
