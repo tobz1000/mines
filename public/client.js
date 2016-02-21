@@ -6,10 +6,11 @@ turn number. */
 /* TODO: store game passwords in cookies */
 /* TODO: prettier game list & turn list; highlight current game/turn */
 
-let $gameArea, currentGame, gamePasses = [];
+let $gameArea, $gameList, currentGame, gamePasses = [];
 
 $(() => {
 	$gameArea = $("#gameArea");
+	$gameList = $("#gameList");
 	$gameArea.on('contextmenu', (e) => { e.preventDefault() });
 
 	new EventSource(`games?from=0`)
@@ -17,14 +18,14 @@ $(() => {
 });
 
 const refreshGameList = resp => {
-	$("#gameList").empty();
+	$gameList.empty();
 
 	for(const g of JSON.parse(resp.data)) {
 		/* TODO: race condition for display of "watchable"/"playable", if the
 		response from newGame() comes is received after the gameLister entry. */
 		const label = `${g.id} (${g.dims[0]}x${g.dims[1]}, ${g.mines}, ` +
 				`${gamePasses[g.id] ? "playable" : "watchable"})`;
-		$("#gameList").append($("<li>")
+		$gameList.append($("<li>")
 			.text(label)
 			.click(() => { displayGame(g, gamePasses[g.id]); })
 		);
