@@ -160,12 +160,6 @@ const performAction = req => {
 			}
 		},
 
-		/* TODO:
-			optional game constructor param for initial board/mine positions;
-			game.dump(): save dims and initial board/mine positions;
-			saveGameParams();
-			loadGameParams();
-		probably save to file(s) at first; look at a db eventually */
 		loadGame : {
 			paramChecks : ty.obj.with({
 				id : ty.str.ne
