@@ -171,6 +171,10 @@ class GameEnd(Exception):
 		print("Time elapsed: {:.5}s".format(end_time - game.start_time))
 		print("="*50)
 
+class QuickClear(Exception):
+	def __init__(self, game, coords_list):
+		game.clear_cells(coords_list)
+
 class Game:
 	id = None
 	dims = None
@@ -247,8 +251,8 @@ class Game:
 
 		return resp
 
-	def clear_cells(self):
-		coords_list = tuple(tuple(c.tolist()) for c in
+	def clear_cells(self, coords_list=None):
+		coords_list = coords_list or tuple(tuple(c.tolist()) for c in
 			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
 		)
 
@@ -293,8 +297,17 @@ class Game:
 	# If a pass of a state results in a change, go back to the previous stage.
 	# A turn is ready to submit when the final stage passes without a change,
 	# and there is at least one cell set to TO_CLEAR.
-	def turn(self, strategy_name):
+	# Set instant_clear to True to instead submit a turn as soon as a cell is
+	# set to TO_CLEAR
+	def turn(self, strategy_name, instant_clear=False):
 		mine_zones = None
+
+		def add_to_clear(coords):
+			print("{} add_to_clear".format(coords))
+			if instant_clear:
+				raise QuickClear(self, tuple(coords,))
+			else:
+				self.game_grid[coords] = TO_CLEAR
 
 		# 1. Create a MineZone for each cell with mines around
 		def create_zones():
@@ -334,7 +347,7 @@ class Game:
 						changed = True
 				if zone.can_clear:
 					for coords in zone.cells:
-						self.game_grid[coords] = TO_CLEAR
+						add_to_clear(coords)
 						changed = True
 			return changed
 
@@ -432,7 +445,7 @@ class Game:
 				for cell in test_cells:
 					if all(cell not in pattern for pattern in
 							valid_mine_patterns):
-						self.game_grid[cell] = TO_CLEAR
+						add_to_clear(cell)
 					elif all(cell in pattern for pattern in
 							valid_mine_patterns):
 						self.game_grid[cell] = MINE
@@ -473,26 +486,28 @@ class Game:
 				i += increment
 			return changed
 
-		perform_stages(strategy)
+		try:
+			perform_stages(strategy)
 
-		if (self.game_grid == TO_CLEAR).any():
-			self.clear_cells()
-		else:
-			raise GameEnd(self, "Out of ideas!")
+			if (self.game_grid == TO_CLEAR).any():
+				self.clear_cells()
+			else:
+				raise GameEnd(self, "Out of ideas!")
+		except QuickClear as c:
+			pass
 
-def play_game(game, strategy_name):
-	try:
-		game.first_turn(0)
-		while True:
-			game.turn(strategy_name)
-	except GameEnd as e:
-		pass
-	return game.id
+def play_all_strategies(dims=None, mines=None, reload_id=None):
+	for strat_name, instant_clear in itertools.product(
+		("strat0", "strat1"),
+		(False, True),
+	):
+		game = Game(dims, mines, reload_id)
+		reload_id = reload_id or game.id
+		try:
+			game.first_turn(0)
+			while True:
+				game.turn(strat_name, instant_clear)
+		except GameEnd as e:
+			pass
 
-def play_all_strategies(dims, mines):
-	game = Game(dims, mines)
-	play_game(game, "strat0")
-	game_repeat = Game(reload_id=game.id)
-	play_game(game_repeat, "strat1")
-
-play_all_strategies([80, 80], 500)
+play_all_strategies(reload_id="ui8hs")
