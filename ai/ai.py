@@ -14,7 +14,6 @@ SERVER_ADDR = "http://localhost:1066"
 # cells
 MINE = -1
 UNKNOWN = -2
-TO_CLEAR = -3
 
 # A grouping of cells with a potential number of mines within them.
 # TODO: possibly get rid of min_mines/max_mines; may not be necessary if not
@@ -247,11 +246,10 @@ class Game:
 
 		return resp
 
-	def clear_cells(self):
-		coords_list = tuple(tuple(c.tolist()) for c in
-			numpy.transpose((self.game_grid == TO_CLEAR).nonzero())
-		)
-
+	def clear_cells(self, coords_list):
+		# Remove dups. Needs to be tuple/list for JSON, and tuple/set for hash.
+		# So tuplefy instead of leaving as list/set.
+		coords_list = tuple(set(coords_list))
 		print(" {}".format(len(coords_list)), end='', flush=True)
 
 		self.turns_hash_sum += hash(coords_list)
@@ -287,19 +285,18 @@ class Game:
 			coords = (0,) * len(self.dims)
 
 		print("Clearing...", end='', flush=True)
-		self.game_grid[coords] = TO_CLEAR
-		self.clear_cells()
+		self.clear_cells([coords])
 
 	# If a pass of a state results in a change, go back to the previous stage.
 	# A turn is ready to submit when the final stage passes without a change,
 	# and there is at least one cell set to TO_CLEAR.
-	def turn(self, strategy_name):
-		mine_zones = None
+	def turn(self):
+		self.mine_zones = None
+		self.to_clear = []
 
-		# 1. Create a MineZone for each cell with mines around
+		# Create a MineZone for each cell with mines around
 		def create_zones():
-			nonlocal mine_zones
-			mine_zones = []
+			self.mine_zones = []
 
 			for coords in numpy.transpose((self.game_grid > 0).nonzero()):
 				coords = tuple(coords)
@@ -316,18 +313,18 @@ class Game:
 				if len(zone_cells) == 0:
 					continue
 
-				mine_zones.append(MineZone(
+				self.mine_zones.append(MineZone(
 					zone_cells,
 					zone_mines,
 					zone_mines
 				))
 
-			return False
+			mark_clear_flag()
 
-		# 2. Check for zones to clear/flag
+		# Check for zones to clear/flag
 		def mark_clear_flag():
 			changed = False
-			for zone in mine_zones:
+			for zone in self.mine_zones:
 				if zone.can_flag:
 					for coords in zone.cells:
 						self.game_grid[coords] = MINE
@@ -336,82 +333,19 @@ class Game:
 					for coords in zone.cells:
 						self.game_grid[coords] = TO_CLEAR
 						changed = True
-			return changed
+			if changed:
+				create_zones()
+			else:
+				exhaustive_zone_test()
 
-		# 3. Substract from zones which fully cover another zone
-		def subtract_subsets():
-			nonlocal mine_zones
-			changed = False
-			for i, j in itertools.combinations(range(len(mine_zones)), 2):
-				if len(mine_zones[i]) == 0 or len(mine_zones[j]) == 0:
-					continue
 
-				if mine_zones[i] == mine_zones[j]:
-					changed = True
-					mine_zones[i] &= mine_zones[j]
-					mine_zones[j] = MineZone()
-
-				elif mine_zones[i] < mine_zones[j]:
-					changed = True
-					mine_zones[j] -= mine_zones[i]
-
-				elif mine_zones[i] > mine_zones[j]:
-					changed = True
-					mine_zones[i] -= mine_zones[j]
-
-			return changed
-
-		# TODO:
-		# If the combination of two zones has fixed mine count, add it to
-		# mine_zones.
-		def combine_overlaps():
-			pass
-
-		# 4. Split each overlapping zone
-		# TODO: This stage hasn't seemed to achieved any additional clearings so
-		# far. Possibly should be removed.
-		def split_overlaps():
-			nonlocal mine_zones
-			changed = False
-
-			for i, j in itertools.combinations(range(len(mine_zones)), 2):
-				# if not mine_zones[i].fixed or not mine_zones[j].fixed:
-				# 	continue
-
-				if len(mine_zones[i] & mine_zones[j]) == 0:
-					continue
-
-				if (
-					mine_zones[i] < mine_zones[j] or
-					mine_zones[i] == mine_zones[j] or
-					mine_zones[i] > mine_zones[j]
-				):
-					continue
-
-				split_zones = [
-					mine_zones[j] - mine_zones[i],
-					mine_zones[i] -  mine_zones[j],
-					mine_zones[i] & mine_zones[j]
-				]
-
-				# print("removing:\n{}\n{};".format(mine_zones[i], mine_zones[j]))
-				# print("adding:\n{}".format('\n'.join(map(str, split_zones))))
-
-				changed = True
-				mine_zones[i] = MineZone()
-				mine_zones[j] = MineZone()
-				mine_zones += (split_zones)
-
-		# 5. Exhaustive test of all possible mine positions in overlapping zones
-		# TODO: find elegant way to go back to first stage after a change here,
-		# instead of back to previous stage.
+		# Exhaustive test of all possible mine positions in overlapping zones
 		def exhaustive_zone_test():
-			nonlocal mine_zones
-			for i, j in itertools.combinations(range(len(mine_zones)), 2):
-				if not mine_zones[i].fixed or not mine_zones[j].fixed:
+			for i, j in itertools.combinations(range(len(self.mine_zones)), 2):
+				if not self.mine_zones[i].fixed or not self.mine_zones[j].fixed:
 					continue
 
-				test_cells = mine_zones[i].cells | mine_zones[j].cells
+				test_cells = self.mine_zones[i].cells | self.mine_zones[j].cells
 				valid_mine_patterns = []
 
 				# Try every combination of cells as mines
@@ -420,7 +354,7 @@ class Game:
 						test_mines = frozenset(test_mines)
 						pattern_valid = True
 						# Check whether no. of mines is correct for both zones
-						for zone in (mine_zones[i], mine_zones[j]):
+						for zone in (self.mine_zones[i], self.mine_zones[j]):
 							if len(test_mines & zone.cells) != zone.min_mines:
 								pattern_valid = False
 								break
@@ -428,71 +362,33 @@ class Game:
 						if pattern_valid:
 							valid_mine_patterns.append(test_mines)
 
-				# print("valid patterns: {}".format(valid_mine_patterns))
 				for cell in test_cells:
 					if all(cell not in pattern for pattern in
 							valid_mine_patterns):
-						self.game_grid[cell] = TO_CLEAR
+						self.to_clear +=
 					elif all(cell in pattern for pattern in
 							valid_mine_patterns):
 						self.game_grid[cell] = MINE
 
-			return False
+		create_zones()
 
-		strategy = {
-			"strat0" : [
-				create_zones,
-				mark_clear_flag,
-				exhaustive_zone_test
-			],
-			"strat1" : [
-				create_zones,
-				mark_clear_flag,
-				subtract_subsets,
-				exhaustive_zone_test
-			],
-		}[strategy_name]
-
-		# Recursive function to allow more flexible control flows. The provided
-		# list of stages are performed in order, with the previous stage being
-		# revisited if something changes. A stage can be a single function or
-		# a nested list of stages.
-		def perform_stages(stage):
-			if callable(stage):
-				return stage()
-
-			i = 0
-			changed = False
-			while i < len(stage):
-				increment = 1
-				if perform_stages(stage[i]):
-					changed = True
-					# Go back to previous set on change, if possible
-					if i > 0:
-						increment = -1
-				i += increment
-			return changed
-
-		perform_stages(strategy)
-
-		if (self.game_grid == TO_CLEAR).any():
-			self.clear_cells()
+		if len(self.to_clear) > 0:
+			self.clear_cells(self.to_clear)
 		else:
 			raise GameEnd(self, "Out of ideas!")
 
-def play_game(game, strategy_name):
+def play_game(game):
 	try:
 		game.first_turn(0)
 		while True:
-			game.turn(strategy_name)
+			game.turn()
 	except GameEnd as e:
 		pass
 	return game.id
 
-def play_all_strategies(dims, mines):
-	game = Game(dims, mines)
-	play_game(game, "strat0")
-	game_repeat = Game(reload_id=game.id)
-	play_game(game_repeat, "strat1")
+def repeat_game(id):
+	game = Game(reload_id=id)
+	play_game(game)
 
-play_all_strategies([80, 80], 500)
+game = Game([20, 20], 80)
+play_game(game)
