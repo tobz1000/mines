@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.4
 import json
 import requests
 import random
@@ -400,7 +400,7 @@ class Game:
 				changed = True
 				mine_zones[i] = MineZone()
 				mine_zones[j] = MineZone()
-				mine_zones += (split_zones)
+				mine_zones += split_zones
 
 		# 5. Exhaustive test of all possible mine positions in overlapping zones
 		# TODO: find elegant way to go back to first stage after a change here,
