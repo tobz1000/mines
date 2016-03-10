@@ -7,6 +7,7 @@ import numpy
 import functools
 import itertools
 import time
+from profilehooks import profile
 
 SERVER_ADDR = "http://localhost:1066"
 
@@ -171,6 +172,9 @@ class GameEnd(Exception):
 		print("Time elapsed: {:.5}s".format(end_time - game.start_time))
 		print("="*50)
 
+class LookupGrid(numpy.ndarray):
+	reverse_lookup = {}
+
 class Game:
 	id = None
 	dims = None
@@ -181,6 +185,7 @@ class Game:
 	win = False
 	turns_hash_sum = 0
 	start_time = None
+	surr_coords_lookup = None
 
 	def __init__(self, dims=None, mines=None, reload_id=None):
 		if(dims and mines):
@@ -203,6 +208,7 @@ class Game:
 
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)
 		self.game_grid.fill(UNKNOWN)
+		self.surr_coords_lookup = {}
 
 		print("New game: {} (original {}) dims: {} mines: {}".format(
 			self.id,
@@ -263,18 +269,23 @@ class Game:
 
 	# Iterator for co-ordinate tuples of all cells in contact with a given cell.
 	def get_surrounding(self, coords):
-		for shift in itertools.product(*([-1, 0, 1],) * len(coords)):
-			surr_coords = tuple(sum(c) for c in zip(shift, coords))
+		if not coords in self.surr_coords_lookup:
+			self.surr_coords_lookup[coords] = []
 
-			# Check all coords are positive
-			if any(c < 0 for c in surr_coords):
-				continue
+			for shift in itertools.product(*([-1, 0, 1],) * len(coords)):
+				surr_coords = tuple(sum(c) for c in zip(shift, coords))
 
-			# Check all coords are within grid size
-			if any(c >= d for c, d in zip(surr_coords, self.dims)):
-				continue
+				# Check all coords are positive
+				if any(c < 0 for c in surr_coords):
+					continue
 
-			yield surr_coords
+				# Check all coords are within grid size
+				if any(c >= d for c, d in zip(surr_coords, self.dims)):
+					continue
+
+				self.surr_coords_lookup[coords].append(surr_coords)
+
+		return self.surr_coords_lookup[coords]
 
 	def first_turn(self, coords=None):
 		self.start_time = time.time()
@@ -293,6 +304,7 @@ class Game:
 	# If a pass of a state results in a change, go back to the previous stage.
 	# A turn is ready to submit when the final stage passes without a change,
 	# and there is at least one cell set to TO_CLEAR.
+	#@profile
 	def turn(self, strategy_name):
 		mine_zones = None
 
@@ -301,8 +313,7 @@ class Game:
 			nonlocal mine_zones
 			mine_zones = []
 
-			for coords in numpy.transpose((self.game_grid > 0).nonzero()):
-				coords = tuple(coords)
+			def create_zone(coords):
 				zone_cells = frozenset([
 					surr for surr in self.get_surrounding(coords) if
 							self.game_grid[surr] == UNKNOWN
@@ -314,13 +325,16 @@ class Game:
 				zone_mines = self.game_grid[coords] - known_mines
 
 				if len(zone_cells) == 0:
-					continue
+					return
 
 				mine_zones.append(MineZone(
 					zone_cells,
 					zone_mines,
 					zone_mines
 				))
+
+			for coords in numpy.transpose((self.game_grid > 0).nonzero()):
+				create_zone(tuple(coords))
 
 			return False
 
@@ -495,4 +509,4 @@ def play_all_strategies(dims, mines):
 	game_repeat = Game(reload_id=game.id)
 	play_game(game_repeat, "strat1")
 
-play_all_strategies([80, 80], 500)
+play_all_strategies([160, 160], 1500)

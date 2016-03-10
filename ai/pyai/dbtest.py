@@ -15,22 +15,18 @@ UNKNOWN = -2
 TO_CLEAR = -3
 
 class NoDbNdarray:
-	@profile
 	def create_grid(self, dims):
 		self.game_grid = numpy.ndarray(dims, dtype=int)
 		self.game_grid.fill(UNKNOWN)
 
-	@profile
 	def set_cells(self, coords_list, state):
 		for coords in coords_list:
 			self.game_grid[coords] = state
 
-	@profile
 	def get_state_cells(self, state):
 		return tuple(c.tolist() for c in
 			numpy.transpose((self.game_grid == state).nonzero()))
 
-	@profile
 	def get_cell_state(self, coords):
 		return self.game_grid[coords]
 
