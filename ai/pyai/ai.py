@@ -172,9 +172,6 @@ class GameEnd(Exception):
 		print("Time elapsed: {:.5}s".format(end_time - game.start_time))
 		print("="*50)
 
-class LookupGrid(numpy.ndarray):
-	reverse_lookup = {}
-
 class Game:
 	id = None
 	dims = None
@@ -509,4 +506,5 @@ def play_all_strategies(dims, mines):
 	game_repeat = Game(reload_id=game.id)
 	play_game(game_repeat, "strat1")
 
-play_all_strategies([160, 160], 1500)
+if __name__ == '__main__':
+	play_all_strategies([160, 160], 1500)
