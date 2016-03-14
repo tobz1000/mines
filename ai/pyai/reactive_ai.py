@@ -28,8 +28,11 @@ class ReactiveGame(object):
 	win = False
 	turns_hash_sum = 0
 	start_time = None
+	wait_time = None
 
 	def __init__(self, dims=None, mines=None, reload_id=None):
+		self.wait_time = float(0)
+
 		if(dims and mines):
 			resp = self.action({
 				"action": "newGame",
@@ -70,10 +73,14 @@ class ReactiveGame(object):
 		if self.password:
 			params["pass"] = self.password
 
+		wait_start = time.time()
+
 		# TODO: error handling, both from "error" JSON and other server
 		# response/no server response
 		resp = json.loads(requests.post(SERVER_ADDR + "/action",
 				data=json.dumps(params)).text)
+
+		self.wait_time += time.time() - wait_start
 
 		err = resp.get("error")
 
@@ -83,9 +90,6 @@ class ReactiveGame(object):
 
 		self.game_over = resp["gameOver"]
 		self.win = resp["win"]
-
-		if self.game_over:
-			raise GameEnd(self)
 
 		self.cells_rem = resp["cellsRem"]
 
@@ -105,17 +109,21 @@ class ReactiveGame(object):
 		return resp
 
 	def clear_cells(self):
-		print("known_cells: {}".format(self.known_cells))
 		coords_list = tuple(cell.coords for cell in self.known_cells[TO_CLEAR])
 
 		print(" {}".format(len(coords_list)), end='', flush=True)
 
 		self.turns_hash_sum += hash(coords_list)
 
-		self.action({
+		resp = self.action({
 			"action": "clearCells",
 			"coords": coords_list
 		})
+
+		print("->{}".format(len(resp["newCellData"])), end='', flush=True)
+
+		if self.game_over:
+			raise GameEnd(self)
 
 	def first_turn(self, coords=None):
 		self.start_time = time.time()
@@ -148,70 +156,56 @@ class GameGrid(dict):
 			dict.__setitem__(self, coords, Cell(coords, self.parent_game))
 		return dict.__getitem__(self, coords)
 
-class UnknownSurrMineCount(object):
-	_val = 0
+class Cell(object):
+	def __init__(self, coords, parent_game):
+		self.coords = coords
+		self.parent_game = parent_game
 
-	def __get__(self, instance, owner):
-		return self._val
+		self._state = UNKNOWN
+		self._surr_cells = None
+		self._unkn_surr_mine_cnt = 0
+		self._unkn_surr_empt_cnt = None
 
-	def __set__(self, instance, val):
-		if val == 0 and instance.state == EMPTY:
-			for cell in instance.surr_cells:
-				if cell.state == UNKNOWN:
-					cell.state = TO_CLEAR
-		self._val = val
+	def __str__(self):
+		return (
+			"Cell {}: {} surrounding; state={}; unkn_surr_mine_cnt={}; "
+			"unkn_surr_empt_cnt={}".format(
+				self.coords,
+				len(self.surr_cells),
+				self.state,
+				self.unkn_surr_mine_cnt,
+				self.unkn_surr_empt_cnt
+			)
+		)
 
-class UnknownSurrEmptyCount(object):
-	_val = None
+	@property
+	def state(self):
+		return self._state
 
-	# TODO: the @reify decorator from "Pyramid" framework does the
-	# create-once-and-store pattern used here. Try with that instead of my own
-	# implementation.
-	def __get__(self, instance, owner):
-		if self._val is None:
-			self._val = len(instance.surr_cells)
-		return self._val
+	@state.setter
+	def state(self, val):
+		known_cells = self.parent_game.known_cells
+		if self._state in known_cells and self in known_cells[self._state]:
+			known_cells[self._state].remove(self)
+		known_cells[val].append(self)
 
-	def __set__(self, instance, val):
-		if val == 0:
-			for cell in instance.surr_cells:
-				if cell.state == UNKNOWN:
-					cell.state = MINE
-		self._val = val
-
-class CellState(object):
-	_val = UNKNOWN
-
-	def __get__(self, instance, owner):
-		return self._val
-
-	def __set__(self, instance, val):
-		known_cells = instance.parent_game.known_cells
-		game_grid = instance.parent_game.game_grid
-		if self._val in known_cells and instance in known_cells[self._val]:
-			known_cells[self._val].remove(instance)
-		known_cells[val].append(instance)
-		self._val = val
+		self._state = val
 
 		if val == MINE:
-			for cell in instance.surr_cells:
+			for cell in self.surr_cells:
 				cell.unkn_surr_mine_cnt -= 1
 
 		if val == EMPTY:
-			for cell in instance.surr_cells:
+			for cell in self.surr_cells:
 				cell.unkn_surr_empt_cnt -= 1
 
+	@property
+	def surr_cells(self):
+		if self._surr_cells is None:
+			self._surr_cells = []
 
-class SurrCells(object):
-	_val = None
-
-	def __get__(self, instance, owner):
-		if self._val is None:
-			centre_coords = instance.coords
-			self._val = []
-
-			for offset in itertools.product(*([-1, 0, 1],) * len(centre_coords)):
-				surr_coords = tuple(sum(c) for c in zip(offset, centre_coords))
+			for offset in itertools.product(*([-1, 0, 1],) * len(self.coords)):
+				surr_coords = tuple(sum(c) for c in zip(offset, self.coords))
 
 				# Check all coords are positive
 				if any(c < 0 for c in surr_coords):
@@ -219,22 +213,38 @@ class SurrCells(object):
 
 				# Check all coords are within grid size
 				if any(c >= d for c, d in zip(surr_coords,
-						instance.parent_game.dims)):
+						self.parent_game.dims)):
 					continue
 
-				self._val.append(instance.parent_game.game_grid[surr_coords])
+				self._surr_cells.append(self.parent_game.game_grid[surr_coords])
 
-		return self._val
+		return self._surr_cells
 
-class Cell(object):
-	state = CellState()
-	surr_cells = SurrCells()
-	unkn_surr_mine_cnt = UnknownSurrMineCount()
-	unkn_surr_empt_cnt = UnknownSurrEmptyCount()
+	@property
+	def unkn_surr_mine_cnt(self):
+		return self._unkn_surr_mine_cnt
 
-	def __init__(self, coords, parent_game):
-		self.coords = coords
-		self.parent_game = parent_game
+	@unkn_surr_mine_cnt.setter
+	def unkn_surr_mine_cnt(self, val):
+		if val == 0 and self.state == EMPTY:
+			for cell in self.surr_cells:
+				if cell.state == UNKNOWN:
+					cell.state = TO_CLEAR
+		self._unkn_surr_mine_cnt = val
+
+	@property
+	def unkn_surr_empt_cnt(self):
+		if self._unkn_surr_empt_cnt is None:
+			self._unkn_surr_empt_cnt = len(self.surr_cells)
+		return self._unkn_surr_empt_cnt
+
+	@unkn_surr_empt_cnt.setter
+	def unkn_surr_empt_cnt(self, val):
+		if val == 0:
+			for cell in self.surr_cells:
+				if cell.state == UNKNOWN:
+					cell.state = MINE
+		self._unkn_surr_empt_cnt = val
 
 def play_game(game):
 	try:
@@ -246,4 +256,5 @@ def play_game(game):
 	return game.id
 
 if __name__ == '__main__':
-	play_game(ReactiveGame([10, 10], 10))
+	play_game(ReactiveGame([200, 200], 4000))
+	# play_game(ReactiveGame(reload_id="dfqdx"))

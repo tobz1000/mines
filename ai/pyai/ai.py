@@ -169,7 +169,10 @@ class GameEnd(Exception):
 
 		print("{}".format("Win!!11" if game.win else "Lose :((("))
 		print("Turns id: {}".format(turns_id))
-		print("Time elapsed: {:.5}s".format(end_time - game.start_time))
+		print("Time elapsed: {:.5}s (+{:.5}s waiting)".format(
+			end_time - game.start_time - game.wait_time,
+			game.wait_time)
+		)
 		print("="*50)
 
 class Game:
@@ -182,9 +185,12 @@ class Game:
 	win = False
 	turns_hash_sum = 0
 	start_time = None
+	wait_time = None
 	surr_coords_lookup = None
 
 	def __init__(self, dims=None, mines=None, reload_id=None):
+		self.wait_time = float(0)
+
 		if(dims and mines):
 			resp = self.action({
 				"action": "newGame",
@@ -221,10 +227,14 @@ class Game:
 		if self.password:
 			params["pass"] = self.password
 
+		wait_start = time.time()
+
 		# TODO: error handling, both from "error" JSON and other server
 		# response/no server response
 		resp = json.loads(requests.post(SERVER_ADDR + "/action",
 				data=json.dumps(params)).text)
+
+		self.wait_time += time.time() - wait_start
 
 		err = resp.get("error")
 
@@ -234,9 +244,6 @@ class Game:
 
 		self.game_over = resp["gameOver"]
 		self.win = resp["win"]
-
-		if self.game_over:
-			raise GameEnd(self)
 
 		self.cells_rem = resp["cellsRem"]
 
@@ -259,10 +266,15 @@ class Game:
 
 		self.turns_hash_sum += hash(coords_list)
 
-		self.action({
+		resp = self.action({
 			"action": "clearCells",
 			"coords": coords_list
 		})
+
+		print("->{}".format(len(resp["newCellData"])), end='', flush=True)
+
+		if self.game_over:
+			raise GameEnd(self)
 
 	# Iterator for co-ordinate tuples of all cells in contact with a given cell.
 	def get_surrounding(self, coords):
@@ -501,6 +513,7 @@ def play_game(game, strategy_name):
 	return game.id
 
 def play_all_strategies(dims, mines):
+	# game = Game(dims, mines)
 	game = Game(dims, mines)
 	play_game(game, "strat0")
 	game_repeat = Game(reload_id=game.id)
