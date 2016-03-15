@@ -13,10 +13,14 @@ from ai import GameEnd
 SERVER_ADDR = "http://localhost:1066"
 
 # Ghetto enum
+# Split the definition of empty cells into "alone" and "adjacent mines". Some
+# calculations on "alone" cells end up as no-ops, so we can avoid performing
+# them and increase performance.
 MINE = -1
 UNKNOWN = -2
-EMPTY = -3
-TO_CLEAR = -4
+ALONE = -3 # Empty; no surrounding mines
+ADJACENT = -4 # Empty; Some surrounding mines
+TO_CLEAR = -5
 
 class ReactiveGame(object):
 	id = None
@@ -55,7 +59,7 @@ class ReactiveGame(object):
 
 		self.known_cells = {
 			MINE : [],
-			EMPTY : [],
+			ADJACENT : [],
 			TO_CLEAR : []
 		}
 
@@ -95,16 +99,19 @@ class ReactiveGame(object):
 
 		for cell_data in resp["newCellData"]:
 			cell = self.game_grid[tuple(cell_data["coords"])]
+			surr_count = cell_data["surrounding"]
 
 			cell.state = {
-				'empty':	EMPTY,
-				'cleared':	EMPTY,
+				'empty':	ALONE if surr_count == 0 else ADJACENT,
+				'cleared':	ALONE if surr_count == 0 else ADJACENT,
 				'mine':		MINE,
 				'unknown':	UNKNOWN
 			}[cell_data["state"]]
 
-			cell.unkn_surr_mine_cnt += cell_data["surrounding"]
-			cell.unkn_surr_empt_cnt -= cell_data["surrounding"]
+
+			if cell.state == ADJACENT:
+				cell.unkn_surr_mine_cnt += surr_count
+				cell.unkn_surr_empt_cnt -= surr_count
 
 		return resp
 
@@ -187,7 +194,8 @@ class Cell(object):
 		known_cells = self.parent_game.known_cells
 		if self._state in known_cells and self in known_cells[self._state]:
 			known_cells[self._state].remove(self)
-		known_cells[val].append(self)
+		if val in known_cells:
+			known_cells[val].append(self)
 
 		self._state = val
 
@@ -195,7 +203,7 @@ class Cell(object):
 			for cell in self.surr_cells:
 				cell.unkn_surr_mine_cnt -= 1
 
-		if val == EMPTY:
+		if val == ADJACENT:
 			for cell in self.surr_cells:
 				cell.unkn_surr_empt_cnt -= 1
 
@@ -205,6 +213,10 @@ class Cell(object):
 			self._surr_cells = []
 
 			for offset in itertools.product(*([-1, 0, 1],) * len(self.coords)):
+				# Don't count self
+				if all(c == 0 for c in offset):
+					continue
+
 				surr_coords = tuple(sum(c) for c in zip(offset, self.coords))
 
 				# Check all coords are positive
@@ -222,11 +234,19 @@ class Cell(object):
 
 	@property
 	def unkn_surr_mine_cnt(self):
+		"""Number of mines in surrounding, uncleared cells. Gets increased if
+		the cell is cleared (by no. of mines); get reduced when surrounding
+		mines are flagged.
+		Value becomes irrelevant/unreliable if cell state becomes ALONE."""
 		return self._unkn_surr_mine_cnt
 
 	@unkn_surr_mine_cnt.setter
 	def unkn_surr_mine_cnt(self, val):
-		if val == 0 and self.state == EMPTY:
+		if self.state == ALONE:
+			return
+		print(self, val)
+		# Cell must be uncovered first; otherwise count will be 0 or -ve anyway
+		if val == 0 and self.state == ADJACENT:
 			for cell in self.surr_cells:
 				if cell.state == UNKNOWN:
 					cell.state = TO_CLEAR
@@ -234,12 +254,22 @@ class Cell(object):
 
 	@property
 	def unkn_surr_empt_cnt(self):
+		"""Number of empty cells in surrounding, uncleared cells. Initial value
+		is number of surrounding cells (i.e. 8 for most cells in a 2D game).Gets
+		reduced if the cell is cleared (by no. of mines), and when surrounding
+		empty cells are cleared.
+		Value becomes irrelevant/unreliable if cell state becomes ALONE."""
 		if self._unkn_surr_empt_cnt is None:
-			self._unkn_surr_empt_cnt = len(self.surr_cells)
+			if self.state == ALONE:
+				self._unkn_surr_empt_cnt = 0
+			else:
+				self._unkn_surr_empt_cnt = len(self.surr_cells)
 		return self._unkn_surr_empt_cnt
 
 	@unkn_surr_empt_cnt.setter
 	def unkn_surr_empt_cnt(self, val):
+		if self.state == ALONE:
+			return
 		if val == 0:
 			for cell in self.surr_cells:
 				if cell.state == UNKNOWN:
@@ -256,5 +286,6 @@ def play_game(game):
 	return game.id
 
 if __name__ == '__main__':
-	play_game(ReactiveGame([200, 200], 4000))
-	# play_game(ReactiveGame(reload_id="dfqdx"))
+	# play_game(ReactiveGame([10, 10], 10))
+	# play_game(ReactiveGame(reload_id="ku5h4"))
+	play_game(ReactiveGame(reload_id="izi6o"))

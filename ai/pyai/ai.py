@@ -514,7 +514,7 @@ def play_game(game, strategy_name):
 
 def play_all_strategies(dims, mines):
 	# game = Game(dims, mines)
-	game = Game(dims, mines)
+	game = Game(reload_id="ku5h4")
 	play_game(game, "strat0")
 	game_repeat = Game(reload_id=game.id)
 	play_game(game_repeat, "strat1")
