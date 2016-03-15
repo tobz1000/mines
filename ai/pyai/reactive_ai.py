@@ -12,6 +12,10 @@ from ai import GameEnd
 
 SERVER_ADDR = "http://localhost:1066"
 
+# Whether the game server can be relied upon to auto-clear zero-cells. Allows
+# for greater performance if so.
+SERVER_CLEARS_ZEROES = True
+
 # Ghetto enum
 MINE = -1
 UNKNOWN = -2
@@ -53,9 +57,8 @@ class ReactiveGame(object):
 
 		self.game_grid = GameGrid(self.dims, self)
 
+		# Reverse lookup table for grid
 		self.known_cells = {
-			MINE : [],
-			EMPTY : [],
 			TO_CLEAR : []
 		}
 
@@ -95,6 +98,7 @@ class ReactiveGame(object):
 
 		for cell_data in resp["newCellData"]:
 			cell = self.game_grid[tuple(cell_data["coords"])]
+			surr_mine_count = cell_data["surrounding"]
 
 			cell.state = {
 				'empty':	EMPTY,
@@ -103,8 +107,11 @@ class ReactiveGame(object):
 				'unknown':	UNKNOWN
 			}[cell_data["state"]]
 
-			cell.unkn_surr_mine_cnt += cell_data["surrounding"]
-			cell.unkn_surr_empt_cnt -= cell_data["surrounding"]
+			# The check avoids unnecessary calculations on zero-cells, can speed
+			# up some games a lot.
+			if surr_mine_count > 0 or not SERVER_CLEARS_ZEROES:
+				cell.unkn_surr_mine_cnt += cell_data["surrounding"]
+				cell.unkn_surr_empt_cnt -= cell_data["surrounding"]
 
 		return resp
 
@@ -187,7 +194,8 @@ class Cell(object):
 		known_cells = self.parent_game.known_cells
 		if self._state in known_cells and self in known_cells[self._state]:
 			known_cells[self._state].remove(self)
-		known_cells[val].append(self)
+		if val in known_cells:
+			known_cells[val].append(self)
 
 		self._state = val
 
@@ -257,4 +265,4 @@ def play_game(game):
 
 if __name__ == '__main__':
 	play_game(ReactiveGame([200, 200], 4000))
-	# play_game(ReactiveGame(reload_id="dfqdx"))
+	# play_game(ReactiveGame(reload_id="ku5h4"))
