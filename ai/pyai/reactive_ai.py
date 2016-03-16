@@ -8,19 +8,41 @@ import itertools
 import time
 from profilehooks import profile
 
-from ai import GameEnd
-
 SERVER_ADDR = "http://localhost:1066"
 
 # Whether the game server can be relied upon to auto-clear zero-cells. Allows
 # for greater performance if so.
 SERVER_CLEARS_ZEROES = True
+VERBOSE = False
 
 # Ghetto enum
 MINE = -1
 UNKNOWN = -2
 EMPTY = -3
 TO_CLEAR = -4
+
+class GameEnd(Exception):
+	def __init__(self, game, msg=None):
+		end_time = time.time()
+		# TODO: this is negative for really short games. Figure that out...
+		game.total_time = end_time - game.start_time - game.wait_time
+
+		if VERBOSE:
+			print()
+
+			if msg:
+				print(msg)
+
+			turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
+
+			print("{}".format("Win!!11" if game.win else "Lose :((("))
+			print("Turns id: {}".format(turns_id))
+			print("Time elapsed: {:.5}s (+{:.5}s waiting)".format(
+				game.total_time,
+				game.wait_time)
+			)
+			print("="*50)
+
 
 class ReactiveGame(object):
 	id = None
@@ -63,12 +85,13 @@ class ReactiveGame(object):
 			EMPTY: []
 		}
 
-		print("New game: {} (original {}) dims: {} mines: {}".format(
-			self.id,
-			reload_id or self.id,
-			self.dims,
-			self.mines
-		))
+		if VERBOSE:
+			print("New game: {} (original {}) dims: {} mines: {}".format(
+				self.id,
+				reload_id or self.id,
+				self.dims,
+				self.mines
+			))
 
 	def action(self, params):
 		if self.id:
@@ -123,12 +146,14 @@ class ReactiveGame(object):
 			if guess_cell is None:
 				raise GameEnd(self, "Out of ideas!")
 
-			print("(?)", end='', flush=True)
+			if VERBOSE:
+				print("(?)", end='', flush=True)
 			guess_cell.state = TO_CLEAR
 
 		coords_list = tuple(cell.coords for cell in self.known_cells[TO_CLEAR])
 
-		print("{}".format(len(coords_list)), end='', flush=True)
+		if VERBOSE:
+			print("{}".format(len(coords_list)), end='', flush=True)
 
 		self.turns_hash_sum += hash(coords_list)
 
@@ -137,24 +162,27 @@ class ReactiveGame(object):
 			"coords": coords_list
 		})
 
-		print("->{} ".format(len(resp["newCellData"])), end='', flush=True)
+		if VERBOSE:
+			print("->{} ".format(len(resp["newCellData"])), end='', flush=True)
 
 		if self.game_over:
 			raise GameEnd(self)
 
-	def first_turn(self, coords=None):
+	def play(self, first_coords=None):
 		self.start_time = time.time()
-		if coords == None:
-			coords = tuple(
+		if first_coords == None:
+			first_coords = tuple(
 				math.floor(random.random() * dim) for dim in self.dims
 			)
 
-		if coords == 0:
-			coords = (0,) * len(self.dims)
+		if first_coords == 0:
+			first_coords = (0,) * len(self.dims)
 
-		print("Clearing... ", end='', flush=True)
-		self.game_grid[coords].state = TO_CLEAR
-		self.clear_cells()
+		if VERBOSE:
+			print("Clearing... ", end='', flush=True)
+		self.game_grid[first_coords].state = TO_CLEAR
+		while True:
+			self.clear_cells()
 
 	def get_guess_cell(self):
 		# Just find first cleared cell with surrounding u nknown empties
@@ -270,14 +298,50 @@ class Cell(object):
 					cell.state = MINE
 		self._unkn_surr_empt_cnt = val
 
-def play_game(game):
-	try:
-		game.first_turn(0)
-		while True:
-			game.clear_cells()
-	except GameEnd as e:
-		pass
-	return game.id
+def play_game(dims, mines, repeats):
+	played_games = []
 
+	for i in range(repeats):
+		try:
+			game = ReactiveGame(dims, mines, repeats)
+			game.play()
+		# TODO: probably move code out of GameEnd.__init__ and into here
+		except GameEnd as e:
+			played_games.append(game)
+
+	won = 0
+
+	totals = {
+		"cells_rem": 0,
+		"total_time": 0,
+		"wait_time": 0
+	}
+
+	avgs = {}
+
+	for game in played_games:
+		won += 1 if game.win else 0
+		totals["cells_rem"] += game.cells_rem
+		totals["total_time"] += game.total_time
+		totals["wait_time"] += game.wait_time
+
+	for stat,val in totals.items():
+		avgs[stat] = val / repeats
+
+	print(
+		"Won {}/{} games\nAvg. remaining cells: {:.5}/{}\nAvg. time: {:.5}s "
+		"(waiting {:.5}s)".format(
+			won,
+			repeats,
+			avgs["cells_rem"],
+			# TODO: actual cell count for more than 2 dimensions here (reduce
+			# dims by product)
+			(dims[0] * dims[1]) - mines,
+			avgs["total_time"],
+			avgs["wait_time"]
+		)
+	)
+
+# TODO: command line args with 'argparse' package
 if __name__ == '__main__':
-	play_game(ReactiveGame([10, 10], 15))
+	play_game([20, 20], 20, 10)
