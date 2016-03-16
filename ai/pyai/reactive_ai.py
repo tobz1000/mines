@@ -5,6 +5,7 @@ import requests
 import random
 import math
 import itertools
+import functools
 import time
 from profilehooks import profile
 
@@ -310,6 +311,7 @@ def play_game(dims, mines, repeats):
 			played_games.append(game)
 
 	won = 0
+	empty_cell_count = functools.reduce(lambda x,y: x*y, dims) - mines
 
 	totals = {
 		"cells_rem": 0,
@@ -329,14 +331,15 @@ def play_game(dims, mines, repeats):
 		avgs[stat] = val / repeats
 
 	print(
-		"Won {}/{} games\nAvg. remaining cells: {:.5}/{}\nAvg. time: {:.5}s "
-		"(waiting {:.5}s)".format(
+		"Won {}/{} games ({:.5}%)\n"
+		"Avg. cells cleared: {:.5}/{} ({:.5}%)\n"
+		"Avg. time: {:.5}s (waiting {:.5}s)".format(
 			won,
 			repeats,
-			avgs["cells_rem"],
-			# TODO: actual cell count for more than 2 dimensions here (reduce
-			# dims by product)
-			(dims[0] * dims[1]) - mines,
+			100 * won / repeats,
+			empty_cell_count - avgs["cells_rem"],
+			empty_cell_count,
+			100 * (empty_cell_count - avgs["cells_rem"]) / empty_cell_count,
 			avgs["total_time"],
 			avgs["wait_time"]
 		)
