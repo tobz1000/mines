@@ -59,7 +59,8 @@ class ReactiveGame(object):
 
 		# Reverse lookup table for grid
 		self.known_cells = {
-			TO_CLEAR : []
+			TO_CLEAR: [],
+			EMPTY: []
 		}
 
 		print("New game: {} (original {}) dims: {} mines: {}".format(
@@ -110,15 +111,24 @@ class ReactiveGame(object):
 			# The check avoids unnecessary calculations on zero-cells, can speed
 			# up some games a lot.
 			if surr_mine_count > 0 or not SERVER_CLEARS_ZEROES:
-				cell.unkn_surr_mine_cnt += cell_data["surrounding"]
-				cell.unkn_surr_empt_cnt -= cell_data["surrounding"]
+				cell.unkn_surr_mine_cnt += surr_mine_count
+				cell.unkn_surr_empt_cnt -= surr_mine_count
 
 		return resp
 
 	def clear_cells(self):
+		if not any(self.known_cells[TO_CLEAR]):
+			guess_cell = self.get_guess_cell()
+
+			if guess_cell is None:
+				raise GameEnd(self, "Out of ideas!")
+
+			print("(?)", end='', flush=True)
+			guess_cell.state = TO_CLEAR
+
 		coords_list = tuple(cell.coords for cell in self.known_cells[TO_CLEAR])
 
-		print(" {}".format(len(coords_list)), end='', flush=True)
+		print("{}".format(len(coords_list)), end='', flush=True)
 
 		self.turns_hash_sum += hash(coords_list)
 
@@ -127,7 +137,7 @@ class ReactiveGame(object):
 			"coords": coords_list
 		})
 
-		print("->{}".format(len(resp["newCellData"])), end='', flush=True)
+		print("->{} ".format(len(resp["newCellData"])), end='', flush=True)
 
 		if self.game_over:
 			raise GameEnd(self)
@@ -142,15 +152,19 @@ class ReactiveGame(object):
 		if coords == 0:
 			coords = (0,) * len(self.dims)
 
-		print("Clearing...", end='', flush=True)
+		print("Clearing... ", end='', flush=True)
 		self.game_grid[coords].state = TO_CLEAR
 		self.clear_cells()
 
-	def turn(self):
-		if not any(self.known_cells[TO_CLEAR]):
-			raise GameEnd(self, "Out of ideas!")
+	def get_guess_cell(self):
+		# Just find first cleared cell with surrounding u nknown empties
+		for cell in self.known_cells[EMPTY]:
+			if cell.unkn_surr_empt_cnt <= 0:
+				continue
 
-		self.clear_cells()
+			for surr_cell in cell.surr_cells:
+				if surr_cell.state == UNKNOWN:
+					return surr_cell
 
 
 class GameGrid(dict):
@@ -192,8 +206,10 @@ class Cell(object):
 	@state.setter
 	def state(self, val):
 		known_cells = self.parent_game.known_cells
+
 		if self._state in known_cells and self in known_cells[self._state]:
 			known_cells[self._state].remove(self)
+
 		if val in known_cells:
 			known_cells[val].append(self)
 
@@ -258,11 +274,10 @@ def play_game(game):
 	try:
 		game.first_turn(0)
 		while True:
-			game.turn()
+			game.clear_cells()
 	except GameEnd as e:
 		pass
 	return game.id
 
 if __name__ == '__main__':
-	play_game(ReactiveGame([200, 200], 4000))
-	# play_game(ReactiveGame(reload_id="ku5h4"))
+	play_game(ReactiveGame([10, 10], 15))
