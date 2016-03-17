@@ -1,4 +1,4 @@
-/*	Providesthe functionality of Python's itertools.product in.
+/*	Provides the functionality of Python's itertools.product in JS.
 	Code modified from gist.github.com/cybercase/db7dde901d7070c98c48 */
 
 function product() {
