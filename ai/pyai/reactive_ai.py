@@ -1,5 +1,4 @@
 #!/usr/bin/env python3.4
-
 import json
 import requests
 import random
@@ -258,6 +257,10 @@ class Cell(object):
 			self._surr_cells = []
 
 			for offset in itertools.product(*([-1, 0, 1],) * len(self.coords)):
+				# Don't include self
+				if all(c == 0 for c in offset):
+					continue
+
 				surr_coords = tuple(sum(c) for c in zip(offset, self.coords))
 
 				# Check all coords are positive
@@ -347,4 +350,4 @@ def play_game(dims, mines, repeats):
 
 # TODO: command line args with 'argparse' package
 if __name__ == '__main__':
-	play_game([20, 20], 20, 10)
+	play_game([4, 4, 4], 10, 100)

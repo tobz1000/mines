@@ -6,13 +6,39 @@ const nd = require('ndarray');
 require('coffee-script/register');
 const ty = require('assert-type');
 const fs = require('fs');
+const clArgs = require('command-line-args');
+const product = require('./product');
 
 const GAME_ID_LEN = 5;
 const PUBLIC_HTML_DIR = 'public';
 
 /* Validation definitions */
-const TY_DIMS = ty.arr.of([ty.int.pos, ty.int.pos]);
-const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.of([ty.int.nonneg, ty.int.nonneg]));
+const TY_DIMS = ty.arr.ne.of(ty.int.pos);
+const TY_COORDS_LIST = ty.arr.ne.of(ty.arr.ne.of(ty.int.nonneg));
+
+const argsList = clArgs([
+	{
+		name: 'help',
+		alias: 'h',
+		description: 'Display available command line arguments',
+		type: Boolean
+	},
+	{ // TODO: consolidate/organise the code activated by this.
+		name: 'gamedb',
+		alias: 'd',
+		description:
+			'Save played games to a database, to be replayed or watched.' +
+			'Seems to increase server delay ~25%.',
+		type: Boolean
+	}
+]);
+
+const args = argsList.parse();
+
+if(args.help) {
+	console.log(argsList.getUsage());
+	process.exit();
+}
 
 const MinesError = function(error, info) {
 	this.error = error;
@@ -20,16 +46,19 @@ const MinesError = function(error, info) {
 }
 
 const serverInit = () => {
-	express()
-		.use(express.static(PUBLIC_HTML_DIR))
-		.use('/games', (req, resp, next) => {
+	const app = express();
+	app.use(express.static(PUBLIC_HTML_DIR));
+	app.post('/action', postResponse);
+	app.listen(1066);
+
+	if(args.gamedb) {
+		app.use('/games', (req, resp, next) => {
 			sseReplayer(gameLister, req, resp, next);
-		})
-		.use('/watch', (req, resp, next) => {
+		});
+		app.use('/watch', (req, resp, next) => {
 			sseReplayer(getGame(req.query.id).broadcaster, req, resp, next);
-		})
-		.post('/action', postResponse)
-		.listen(1066);
+		});
+	}
 }
 
 /* Hacky; uses sse's reconnection replay to get all events from a given
@@ -118,18 +147,21 @@ const performAction = req => {
 			throw new Error(`Tried to overwrite game id: "${id}"`);
 		game = new Game(id, pass, dims, mines, gridArray);
 
-		/* Save initial state to db to play again */
-		db.save(game.gameState({ showGridArray: true }));
-
 		/* Add to list of currently active games */
 		games[id] = game;
 
-		/* Update broadcasted list of games */
-		gameLister.sendGames();
+		if(args.gamedb)
+		{
+			/* Save initial state to db to play again */
+			db.save(game.gameState({ showGridArray: true }));
+
+			/* Update broadcasted list of games */
+			gameLister.sendGames();
+		}
 	}
 
 	/* TODO: These can probably inherit a base GameAction class? */
-	const actions = {
+	let actions = {
 		newGame : {
 			paramChecks : ty.obj.with({
 				dims : TY_DIMS,
@@ -159,8 +191,10 @@ const performAction = req => {
 				game.clearCells(req.coords);
 			}
 		},
+	};
 
-		loadGame : {
+	if(args.gamedb){
+		actions.loadGame = {
 			paramChecks : ty.obj.with({
 				id : ty.str.ne
 			}),
@@ -174,8 +208,8 @@ const performAction = req => {
 					params.gridArray
 				);
 			}
-		}
-	};
+		};
+	}
 
 	if(!(actionName = req.action))
 		throw new MinesError("no action specified",
@@ -206,8 +240,12 @@ const performAction = req => {
 		else throw e;
 	}
 	gameAction.func();
+
 	const gameState = game.gameState({ showLastCells: true });
-	game.broadcaster.send(gameState);
+
+	if(args.gamedb)
+		game.broadcaster.send(gameState);
+
 	return gameState;
 }
 
@@ -242,51 +280,25 @@ const Game = function(id, pass, dims, mines, gridArray) {
 	)
 	const gameGrid = nd(gridArray, dims);
 
-	/* multi-dim version - broken. */
-	// const surroundingCoords = function*() {
-	// 	const iter = (baseCoords, modCoords, dim) => {
-	// 		if(dim === 0) {
-	// 			/* Don't count the central cell itself */
-	// 			if(baseCoords.every((dim) => { return dim === 0; }))
-	// 				return 0;
-
-	// 			let newCoords = baseCoords.map((base, i) => {
-	// 				return base + modCoords[i];
-	// 			});
-
-	// 			let state = gameGrid.get.apply(this, newCoords);
-	// 			return state === cellState.MINE ? 1 : 0;
-	// 		}
-
-	// 		let ret = 0;
-	// 		for(let i of [-1, 0, 1]) {
-	// 			modCoords[dim - 1] = i;
-	// 			ret += iter(baseCoords, modCoords, dim - 1);
-	// 		}
-
-	// 		return ret;
-	// 	};
-
-	// 	return iter(coords, [], coords.length);
-	// }
-
-	/* Yields coordinates of surrounding cells */
 	const surroundingCoords = coords => {
 		let ret = [];
-		for (let i of [-1, 0, 1])
-			for (let j of [-1, 0, 1]) {
-				if(i === 0 && j == 0)
-					continue;
+		for (let offset of product.repeatProduct([-1, 0, 1], coords.length)) {
+			// Don't include self
+			if(offset.every(c => c == 0))
+				continue;
 
-				let x = coords[0] + i, y = coords[1] + j;
+			// Add offset to coords
+			const surrCoords = coords.map((val, i) => val + offset[i]);
 
-				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
-					continue;
+			// Check all coords are greater than zero, and within grid limits
+			if(surrCoords.some((c, i) => c >= dims[i] || c < 0))
+				continue;
 
-				ret.push([x, y]);
-			}
+			ret.push(surrCoords);
+		}
+
 		return ret;
-	};
+	}
 
 	/* Representation of a cell in the grid. gets/sets gameGrid state. */
 	const Cell = function(coords) {
@@ -300,27 +312,15 @@ const Game = function(id, pass, dims, mines, gridArray) {
 			return surrCount;
 		}
 
-		this.getState = () => { return gameGrid.get(coords[0], coords[1]); };
-
-		/* multidim version */
-		//this.getState = () => gameGrid.get.apply(this, coords);
-
-		/* multidim version */
-		//this.uncover = () => {
-		//	/*	ndarray.get needs coords as individual args, plus our new value
-		//		on the end. So we have to duplicate coords and add the value
-		//		to the end. */
-		//	let args = coords.slice();
-		//	args.push(cellState.CLEARED);
-		//	gameGrid.set.apply(this, args);
-		//};
+		// this.getState = () => { return gameGrid.get(coords[0], coords[1]); };
+		this.getState = () => { return gameGrid.get(...coords); };
 
 		this.uncover = () => {
 			if(this.getState() === cellState.MINE)
 				gameOver = true;
 
 			else if(this.getState() === cellState.EMPTY) {
-				gameGrid.set(coords[0], coords[1], cellState.CLEARED);
+				gameGrid.set(...coords.concat(cellState.CLEARED));
 
 				if(--cellsRem <= 0) {
 					gameOver = true;
@@ -346,7 +346,8 @@ const Game = function(id, pass, dims, mines, gridArray) {
 		};
 	};
 
-	this.broadcaster = sse({ history : Infinity });
+	if(args.gamedb)
+		this.broadcaster = sse({ history : Infinity });
 
 	/*	Returns game info for the user or database. */
 	/* TODO: default parameters not working in Node :( */
