@@ -13,7 +13,12 @@ SERVER_ADDR = "http://localhost:1066"
 # Whether the game server can be relied upon to auto-clear zero-cells. Allows
 # for greater performance if so.
 SERVER_CLEARS_ZEROES = True
-VERBOSE = False
+
+# TODO: command line arg '-v0/-v1' etc with 'argparse' package
+# 0: No output
+# 1: See results of repeated games
+# 2: See progress of single game
+VERBOSITY = 1
 
 # Ghetto enum
 MINE = -1
@@ -21,27 +26,31 @@ UNKNOWN = -2
 EMPTY = -3
 TO_CLEAR = -4
 
+def log(verbosity, *args, **kwargs):
+	if(VERBOSITY >= verbosity):
+		print(*args, **kwargs)
+
 class GameEnd(Exception):
 	def __init__(self, game, msg=None):
 		end_time = time.time()
 		# TODO: this is negative for really short games. Figure that out...
 		game.total_time = end_time - game.start_time - game.wait_time
 
-		if VERBOSE:
-			print()
+		# Line break
+		log(2)
 
-			if msg:
-				print(msg)
+		if msg:
+			log(2, msg)
 
-			turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
+		turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
 
-			print("{}".format("Win!!11" if game.win else "Lose :((("))
-			print("Turns id: {}".format(turns_id))
-			print("Time elapsed: {:.5}s (+{:.5}s waiting)".format(
-				game.total_time,
-				game.wait_time)
-			)
-			print("="*50)
+		log(2, "{}".format("Win!!11" if game.win else "Lose :((("))
+		log(2, "Turns id: {}".format(turns_id))
+		log(2, "Time elapsed: {:.5}s (+{:.5}s waiting)".format(
+			game.total_time,
+			game.wait_time)
+		)
+		log(2, "="*50)
 
 
 class ReactiveGame(object):
@@ -59,13 +68,13 @@ class ReactiveGame(object):
 	def __init__(self, dims=None, mines=None, reload_id=None):
 		self.wait_time = float(0)
 
-		if(dims and mines):
+		if(dims is not None and mines is not None):
 			resp = self.action({
 				"action": "newGame",
 				"dims": dims,
 				"mines": mines
 			})
-		elif(reload_id):
+		elif(reload_id is not None):
 			resp = self.action({
 				"action": "loadGame",
 				"id": reload_id
@@ -85,13 +94,16 @@ class ReactiveGame(object):
 			EMPTY: []
 		}
 
-		if VERBOSE:
-			print("New game: {} (original {}) dims: {} mines: {}".format(
-				self.id,
-				reload_id or self.id,
-				self.dims,
-				self.mines
-			))
+		log(2, "New game: {} (original {}) dims: {} mines: {}".format(
+			self.id,
+			reload_id or self.id,
+			self.dims,
+			self.mines
+		))
+		try:
+			self.play()
+		except GameEnd as e:
+			pass
 
 	def action(self, params):
 		if self.id:
@@ -146,14 +158,12 @@ class ReactiveGame(object):
 			if guess_cell is None:
 				raise GameEnd(self, "Out of ideas!")
 
-			if VERBOSE:
-				print("(?)", end='', flush=True)
+			log(2, "(?)", end='', flush=True)
 			guess_cell.state = TO_CLEAR
 
 		coords_list = tuple(cell.coords for cell in self.known_cells[TO_CLEAR])
 
-		if VERBOSE:
-			print("{}".format(len(coords_list)), end='', flush=True)
+		log(2, "{}".format(len(coords_list)), end='', flush=True)
 
 		self.turns_hash_sum += hash(coords_list)
 
@@ -162,8 +172,7 @@ class ReactiveGame(object):
 			"coords": coords_list
 		})
 
-		if VERBOSE:
-			print("->{} ".format(len(resp["newCellData"])), end='', flush=True)
+		log(2, "->{} ".format(len(resp["newCellData"])), end='', flush=True)
 
 		if self.game_over:
 			raise GameEnd(self)
@@ -178,8 +187,7 @@ class ReactiveGame(object):
 		if first_coords == 0:
 			first_coords = (0,) * len(self.dims)
 
-		if VERBOSE:
-			print("Clearing... ", end='', flush=True)
+		log(2, "Clearing... ", end='', flush=True)
 		self.game_grid[first_coords].state = TO_CLEAR
 		while True:
 			self.clear_cells()
@@ -302,16 +310,11 @@ class Cell(object):
 					cell.state = MINE
 		self._unkn_surr_empt_cnt = val
 
-def play_game(dims, mines, repeats):
+def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		try:
-			game = ReactiveGame(dims, mines, repeats)
-			game.play()
-		# TODO: probably move code out of GameEnd.__init__ and into here
-		except GameEnd as e:
-			played_games.append(game)
+		played_games.append(ReactiveGame(dims, mines))
 
 	won = 0
 	empty_cell_count = functools.reduce(lambda x,y: x*y, dims) - mines
@@ -333,7 +336,7 @@ def play_game(dims, mines, repeats):
 	for stat,val in totals.items():
 		avgs[stat] = val / repeats
 
-	print(
+	log(1,
 		"Won {}/{} games ({:.5}%)\n"
 		"Avg. cells cleared: {:.5}/{} ({:.5}%)\n"
 		"Avg. time: {:.5}s (waiting {:.5}s)".format(
@@ -348,6 +351,5 @@ def play_game(dims, mines, repeats):
 		)
 	)
 
-# TODO: command line args with 'argparse' package
 if __name__ == '__main__':
-	play_game([4, 4, 4], 10, 100)
+	play_game([4, 4, 4], 4, 5)
