@@ -15,7 +15,7 @@ function product() {
 }
 
 function repeatProduct(arr, count) {
-	return product(...Array.apply(null, Array(count)).map(() => arr));
+	return product(...new Array(count).fill(arr));
 }
 
 // console.log(product([1], [2, 3], ['a', 'b']));
