@@ -18,7 +18,7 @@ SERVER_CLEARS_ZEROES = True
 # 0: No output
 # 1: See results of repeated games
 # 2: See progress of single game
-VERBOSITY = 1
+VERBOSITY = 0
 
 # Ghetto enum
 MINE = -1
