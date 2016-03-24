@@ -17,8 +17,11 @@ SERVER_CLEARS_ZEROES = True
 # TODO: command line arg '-v0/-v1' etc with 'argparse' package
 # 0: No output
 # 1: See results of repeated games
-# 2: See progress of single game
+# 2: See progress of single game (turns only)
+# 3: Progress of single game with start/end info
 VERBOSITY = 0
+#LOG_DST = open("/home/toby/Desktop/ai.out", "w+")
+LOG_DST = None
 
 # Ghetto enum
 MINE = -1
@@ -27,6 +30,9 @@ EMPTY = -3
 TO_CLEAR = -4
 
 def log(verbosity, *args, **kwargs):
+	if LOG_DST is not None:
+		kwargs["file"] = LOG_DST
+
 	if(VERBOSITY >= verbosity):
 		print(*args, **kwargs)
 
@@ -44,13 +50,13 @@ class GameEnd(Exception):
 
 		turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
 
-		log(2, "{}".format("Win!!11" if game.win else "Lose :((("))
-		log(2, "Turns id: {}".format(turns_id))
-		log(2, "Time elapsed: {:.5}s (+{:.5}s waiting)".format(
+		log(3, "{}".format("Win!!11" if game.win else "Lose :((("))
+		log(3, "Turns id: {}".format(turns_id))
+		log(3, "Time elapsed: {:.5}s (+{:.5}s waiting)".format(
 			game.total_time,
 			game.wait_time)
 		)
-		log(2, "="*50)
+		log(3, "="*50)
 
 
 class ReactiveGame(object):
@@ -94,7 +100,7 @@ class ReactiveGame(object):
 			EMPTY: []
 		}
 
-		log(2, "New game: {} (original {}) dims: {} mines: {}".format(
+		log(3, "New game: {} (original {}) dims: {} mines: {}".format(
 			self.id,
 			reload_id or self.id,
 			self.dims,
@@ -187,7 +193,7 @@ class ReactiveGame(object):
 		if first_coords == 0:
 			first_coords = (0,) * len(self.dims)
 
-		log(2, "Clearing... ", end='', flush=True)
+		log(3, "Clearing... ", end='', flush=True)
 		self.game_grid[first_coords].state = TO_CLEAR
 		while True:
 			self.clear_cells()
