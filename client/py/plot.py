@@ -58,14 +58,16 @@ def play_session(
 	#)
 
 	for config in counter(configs):
-		results.append(ReactiveGame(config["dims"], config["mines"]))
+		results.append(ReactiveClient(
+			JSONServerWrapper(config["dims"], config["mines"])
+		))
 
 	return results
 
 #play_session(cell_mine_ratio_range = (21, 2, -3), repeats_per_config = 10)
 
 games = play_session(
-	repeats_per_config = 25,
+	repeats_per_config = 4,
 	dim_length_range = (7, 8),
 	mine_count_range = (5, 16),
 	num_dims_range = (2, 3)
@@ -75,7 +77,7 @@ games = play_session(
 def group_by_repeats(games):
 	games_by_config = {}
 	for g in games:
-		key = (tuple(g.dims), g.mines)
+		key = (tuple(g.server.dims), g.server.mines)
 		if key not in games_by_config:
 			games_by_config[key] = []
 		games_by_config[key].append(g)
@@ -98,6 +100,6 @@ def get_fraction_cleared(game):
 # No. mines vs % games won
 scatter_plot(
 	group_by_repeats(games),
-	lambda g: g[0].mines,
-	lambda g: 100 * statistics.mean([1 if _g.win else 0 for _g in g])
+	lambda g: g[0].server.mines,
+	lambda g: 100 * statistics.mean([1 if _g.server.win else 0 for _g in g])
 )

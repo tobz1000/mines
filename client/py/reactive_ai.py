@@ -1,17 +1,12 @@
 #!/usr/bin/env python3.4
-import json
-import requests
 import random
 import math
 import itertools
 import functools
 import time
-from profilehooks import profile
 
-SERVER_ADDR = "http://localhost:1066"
+from server_json_wrapper import JSONServerWrapper
 
-# Whether the game server can be relied upon to auto-clear zero-cells. Allows
-# for greater performance if so.
 SERVER_CLEARS_ZEROES = True
 
 # TODO: command line arg '-v0/-v1' etc with 'argparse' package
@@ -19,9 +14,7 @@ SERVER_CLEARS_ZEROES = True
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 0
-#LOG_DST = open("/home/toby/Desktop/ai.out", "w+")
-LOG_DST = None
+VERBOSITY = 1
 
 # Ghetto enum
 MINE = -1
@@ -30,9 +23,6 @@ EMPTY = -3
 TO_CLEAR = -4
 
 def log(verbosity, *args, **kwargs):
-	if LOG_DST is not None:
-		kwargs["file"] = LOG_DST
-
 	if(VERBOSITY >= verbosity):
 		print(*args, **kwargs)
 
@@ -50,7 +40,7 @@ class GameEnd(Exception):
 
 		turns_id = "{:x}".format(abs(game.turns_hash_sum))[:5]
 
-		log(3, "{}".format("Win!!11" if game.win else "Lose :((("))
+		log(3, "{}".format("Win!!11" if game.server.win else "Lose :((("))
 		log(3, "Turns id: {}".format(turns_id))
 		log(3, "Time elapsed: {:.5}s (+{:.5}s waiting)".format(
 			game.total_time,
@@ -58,11 +48,7 @@ class GameEnd(Exception):
 		)
 		log(3, "="*50)
 
-
-class ReactiveGame(object):
-	id = None
-	dims = None
-	mines = None
+class ReactiveClient(object):
 	game_grid = None
 	password = "pass"
 	game_over = False
@@ -71,28 +57,11 @@ class ReactiveGame(object):
 	start_time = None
 	wait_time = None
 
-	def __init__(self, dims=None, mines=None, reload_id=None):
+	def __init__(self, server, first_coords=None):
+		self.server = server
 		self.wait_time = float(0)
 
-		if(dims is not None and mines is not None):
-			resp = self.action({
-				"action": "newGame",
-				"dims": dims,
-				"mines": mines
-			})
-		elif(reload_id is not None):
-			resp = self.action({
-				"action": "loadGame",
-				"id": reload_id
-			})
-		else:
-			raise Exception("Insufficient game parameters")
-
-		self.dims = resp["dims"]
-		self.mines = resp["mines"]
-		self.id = resp["id"]
-
-		self.game_grid = GameGrid(self.dims, self)
+		self.game_grid = GameGrid(self)
 
 		# Reverse lookup table for grid
 		self.known_cells = {
@@ -101,61 +70,32 @@ class ReactiveGame(object):
 		}
 
 		log(3, "New game: {} (original {}) dims: {} mines: {}".format(
-			self.id,
-			reload_id or self.id,
-			self.dims,
-			self.mines
+			self.server.id,
+			self.server.reload_id or self.server.id,
+			self.server.dims,
+			self.server.mines
 		))
+
 		try:
-			self.play()
+			self.play(first_coords)
 		except GameEnd as e:
 			pass
 
-	def action(self, params):
-		if self.id:
-			params["id"] = self.id
+	def play(self, first_coords):
+		self.start_time = time.time()
+		if first_coords == None:
+			first_coords = tuple(
+				math.floor(random.random()
+					* dim) for dim in self.server.dims
+			)
 
-		if self.password:
-			params["pass"] = self.password
+		if first_coords == 0:
+			first_coords = (0,) * len(self.server.dims)
 
-		wait_start = time.time()
-
-		# TODO: error handling, both from "error" JSON and other server
-		# response/no server response
-		resp = json.loads(requests.post(SERVER_ADDR + "/action",
-				data=json.dumps(params)).text)
-
-		self.wait_time += time.time() - wait_start
-
-		err = resp.get("error")
-
-		if err:
-			raise Exception('Server error response: "{}"; info: {}'.format(err,
-					json.dumps(resp.get("info"))))
-
-		self.game_over = resp["gameOver"]
-		self.win = resp["win"]
-
-		self.cells_rem = resp["cellsRem"]
-
-		for cell_data in resp["newCellData"]:
-			cell = self.game_grid[tuple(cell_data["coords"])]
-			surr_mine_count = cell_data["surrounding"]
-
-			cell.state = {
-				'empty':	EMPTY,
-				'cleared':	EMPTY,
-				'mine':		MINE,
-				'unknown':	UNKNOWN
-			}[cell_data["state"]]
-
-			# The check avoids unnecessary calculations on zero-cells, can speed
-			# up some games a lot.
-			if surr_mine_count > 0 or not SERVER_CLEARS_ZEROES:
-				cell.unkn_surr_mine_cnt += surr_mine_count
-				cell.unkn_surr_empt_cnt -= surr_mine_count
-
-		return resp
+		log(3, "Clearing... ", end='', flush=True)
+		self.game_grid[first_coords].state = TO_CLEAR
+		while True:
+			self.clear_cells()
 
 	def clear_cells(self):
 		if not any(self.known_cells[TO_CLEAR]):
@@ -173,30 +113,31 @@ class ReactiveGame(object):
 
 		self.turns_hash_sum += hash(coords_list)
 
-		resp = self.action({
-			"action": "clearCells",
-			"coords": coords_list
-		})
+		wait_start = time.time()
+		new_cells = self.server.clear_cells(coords_list)
+		self.wait_time += time.time() - wait_start
 
-		log(2, "->{} ".format(len(resp["newCellData"])), end='', flush=True)
+		log(2, "->{} ".format(len(new_cells)), end='', flush=True)
 
-		if self.game_over:
+		if self.server.game_over:
 			raise GameEnd(self)
 
-	def play(self, first_coords=None):
-		self.start_time = time.time()
-		if first_coords == None:
-			first_coords = tuple(
-				math.floor(random.random() * dim) for dim in self.dims
-			)
+		for cell_data in new_cells:
+			cell = self.game_grid[tuple(cell_data["coords"])]
+			surr_mine_count = cell_data["surrounding"]
 
-		if first_coords == 0:
-			first_coords = (0,) * len(self.dims)
+			cell.state = {
+				'empty':	EMPTY,
+				'cleared':	EMPTY,
+				'mine':		MINE,
+				'unknown':	UNKNOWN
+			}[cell_data["state"]]
 
-		log(3, "Clearing... ", end='', flush=True)
-		self.game_grid[first_coords].state = TO_CLEAR
-		while True:
-			self.clear_cells()
+			# The check avoids unnecessary calculations on zero-cells, can speed
+			# up some games a lot.
+			if surr_mine_count > 0 or not self.server.clears_zeroes:
+				cell.unkn_surr_mine_cnt += surr_mine_count
+				cell.unkn_surr_empt_cnt -= surr_mine_count
 
 	def get_guess_cell(self):
 		# Just find first cleared cell with surrounding u nknown empties
@@ -208,10 +149,8 @@ class ReactiveGame(object):
 				if surr_cell.state == UNKNOWN:
 					return surr_cell
 
-
 class GameGrid(dict):
-	def __init__(self, dims, parent_game):
-		self.dims = dims
+	def __init__(self, parent_game):
 		self.parent_game = parent_game
 
 	def __getitem__(self, coords):
@@ -283,7 +222,7 @@ class Cell(object):
 
 				# Check all coords are within grid size
 				if any(c >= d for c, d in zip(surr_coords,
-						self.parent_game.dims)):
+						self.parent_game.server.dims)):
 					continue
 
 				self._surr_cells.append(self.parent_game.game_grid[surr_coords])
@@ -320,7 +259,7 @@ def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		played_games.append(ReactiveGame(dims, mines))
+		played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
 
 	won = 0
 	empty_cell_count = functools.reduce(lambda x,y: x*y, dims) - mines
@@ -334,8 +273,8 @@ def play_game(dims, mines, repeats=1):
 	avgs = {}
 
 	for game in played_games:
-		won += 1 if game.win else 0
-		totals["cells_rem"] += game.cells_rem
+		won += 1 if game.server.win else 0
+		totals["cells_rem"] += game.server.cells_rem
 		totals["total_time"] += game.total_time
 		totals["wait_time"] += game.wait_time
 
@@ -358,4 +297,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([4, 4, 4], 4, 5)
+	play_game([6, 6, 6], 4, 5)
