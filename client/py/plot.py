@@ -67,7 +67,7 @@ def play_session(
 #play_session(cell_mine_ratio_range = (21, 2, -3), repeats_per_config = 10)
 
 games = play_session(
-	repeats_per_config = 4,
+	repeats_per_config = 40,
 	dim_length_range = (7, 8),
 	mine_count_range = (5, 16),
 	num_dims_range = (2, 3)
@@ -93,9 +93,9 @@ def scatter_plot(instances, x_fn, y_fn):
 
 def get_fraction_cleared(game):
 	empty_cell_count = (
-		functools.reduce(lambda x,y: x*y, game.dims) - game.mines
+		functools.reduce(lambda x,y: x*y, game.server.dims) - game.server.mines
 	)
-	return (empty_cell_count - game.cells_rem) / empty_cell_count
+	return (empty_cell_count - game.server.cells_rem) / empty_cell_count
 
 # No. mines vs % games won
 scatter_plot(

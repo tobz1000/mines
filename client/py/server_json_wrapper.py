@@ -15,6 +15,10 @@ class JSONServerWrapper(object):
 	dims = None
 	mines = None
 
+	cells_rem = None
+	game_over = None
+	win = None
+
 	def __init__(self, dims=None, mines=None, reload_id=None):
 		self.reload_id = reload_id
 

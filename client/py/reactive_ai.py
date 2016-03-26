@@ -6,15 +6,14 @@ import functools
 import time
 
 from server_json_wrapper import JSONServerWrapper
-
-SERVER_CLEARS_ZEROES = True
+from internal_server import PythonInternalServer, get_surrounding_coords
 
 # TODO: command line arg '-v0/-v1' etc with 'argparse' package
 # 0: No output
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 1
+VERBOSITY = 3
 
 # Ghetto enum
 MINE = -1
@@ -133,14 +132,14 @@ class ReactiveClient(object):
 				'unknown':	UNKNOWN
 			}[cell_data["state"]]
 
-			# The check avoids unnecessary calculations on zero-cells, can speed
-			# up some games a lot.
+			# This check avoids unnecessary calculations on zero-cells; can
+			# speed up some games a lot.
 			if surr_mine_count > 0 or not self.server.clears_zeroes:
 				cell.unkn_surr_mine_cnt += surr_mine_count
 				cell.unkn_surr_empt_cnt -= surr_mine_count
 
 	def get_guess_cell(self):
-		# Just find first cleared cell with surrounding u nknown empties
+		# Just find first cleared cell with surrounding unknown empties
 		for cell in self.known_cells[EMPTY]:
 			if cell.unkn_surr_empt_cnt <= 0:
 				continue
@@ -207,25 +206,13 @@ class Cell(object):
 	@property
 	def surr_cells(self):
 		if self._surr_cells is None:
-			self._surr_cells = []
-
-			for offset in itertools.product(*([-1, 0, 1],) * len(self.coords)):
-				# Don't include self
-				if all(c == 0 for c in offset):
-					continue
-
-				surr_coords = tuple(sum(c) for c in zip(offset, self.coords))
-
-				# Check all coords are positive
-				if any(c < 0 for c in surr_coords):
-					continue
-
-				# Check all coords are within grid size
-				if any(c >= d for c, d in zip(surr_coords,
-						self.parent_game.server.dims)):
-					continue
-
-				self._surr_cells.append(self.parent_game.game_grid[surr_coords])
+			self._surr_cells = [
+				self.parent_game.game_grid[surr_coords]
+				for surr_coords in get_surrounding_coords(
+					self.coords,
+					self.parent_game.server.dims
+				)
+			]
 
 		return self._surr_cells
 
@@ -235,6 +222,7 @@ class Cell(object):
 
 	@unkn_surr_mine_cnt.setter
 	def unkn_surr_mine_cnt(self, val):
+		#if val == 0: log(0, "{} ==> {}".format(self._unkn_surr_mine_cnt, val))
 		if val == 0 and self.state == EMPTY:
 			for cell in self.surr_cells:
 				if cell.state == UNKNOWN:
@@ -259,7 +247,8 @@ def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
+		#played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
+		played_games.append(ReactiveClient(PythonInternalServer(dims, mines)))
 
 	won = 0
 	empty_cell_count = functools.reduce(lambda x,y: x*y, dims) - mines
@@ -297,4 +286,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([6, 6, 6], 4, 5)
+	play_game([6, 6], 5, 1)
