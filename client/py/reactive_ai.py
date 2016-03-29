@@ -13,7 +13,7 @@ from internal_server import PythonInternalServer, get_surrounding_coords
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 3
+VERBOSITY = 1
 
 # Ghetto enum
 MINE = -1
@@ -247,7 +247,6 @@ def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		#played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
 		played_games.append(ReactiveClient(PythonInternalServer(dims, mines)))
 
 	won = 0
@@ -286,4 +285,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([6, 6], 5, 1)
+	play_game([100, 100], 1000, 15)

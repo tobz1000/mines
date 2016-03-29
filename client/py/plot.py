@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.4
 import functools
 import math
+import multiprocessing
 #from multiprocessing.dummy import Pool as ThreadPool
 import statistics
 import scipy
@@ -45,31 +46,31 @@ def play_session(
 						"mines": mine_count
 					})
 
+	# TODO: progressbar for parallel jobs using pool.map_async
+	pool = multiprocessing.Pool(2)
+	results = pool.map(thread_map_fn, configs)
+
 	# Run w/ progress bar, now we know how many games there are
-	counter = progressbar.ProgressBar(widgets=[
-		progressbar.widgets.Timer(format="%s"),
-		" | ",
-		progressbar.widgets.SimpleProgress(),
-	])
+	#counter = progressbar.ProgressBar(widgets=[
+	#	progressbar.widgets.Timer(format="%s"),
+	#	" | ",
+	#	progressbar.widgets.SimpleProgress(),
+	#])
 
-	#results = ThreadPool(2).map(
-	#	lambda c: ReactiveGame(c["dims"], c["mines"]),
-	#	counter(configs)
-	#)
-
-	for config in counter(configs):
-		results.append(ReactiveClient(
-			JSONServerWrapper(config["dims"], config["mines"])
-		))
+	#for config in counter(configs):
+	#	results.append(ReactiveClient(
+	#		PythonInternalServer(config["dims"], config["mines"])
+	#	))
 
 	return results
 
-#play_session(cell_mine_ratio_range = (21, 2, -3), repeats_per_config = 10)
+def thread_map_fn(config):
+	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
 
 games = play_session(
-	repeats_per_config = 40,
-	dim_length_range = (7, 8),
-	mine_count_range = (5, 16),
+	repeats_per_config = 100,
+	dim_length_range = (10, 11),
+	mine_count_range = (20, 30),
 	num_dims_range = (2, 3)
 )
 

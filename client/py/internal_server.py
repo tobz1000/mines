@@ -36,7 +36,7 @@ class PythonInternalServer(object):
 
 	# Whether the game server can be relied upon to auto-clear zero-cells.
 	# Allows for greater performance if so.
-	clears_zeroes = None
+	clears_zeroes = False
 
 	dims = None
 	mines = None
@@ -47,11 +47,10 @@ class PythonInternalServer(object):
 
 	game_grid = None
 
-	def __init__(self, dims=None, mines=None, clears_zeroes=False):
+	def __init__(self, dims=None, mines=None):
 		self.dims = dims
 		self.mines = mines
-		self.clears_zeroes = clears_zeroes
-		self.cells_rem = functools.reduce(lambda x,y: x*y, dims)
+		self.cells_rem = functools.reduce(lambda x,y: x*y, dims) - mines
 
 		# Create grid
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)
@@ -82,5 +81,6 @@ class PythonInternalServer(object):
 		self.cells_rem -= len(coords_list)
 		if self.cells_rem == 0:
 			self.win = True
+			self.game_over = True
 
 		return cleared_cells
