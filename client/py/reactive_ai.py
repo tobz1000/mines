@@ -16,7 +16,7 @@ from internal_server import (
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 2
+VERBOSITY = 1
 
 # Ghetto enum
 MINE = -1
@@ -289,4 +289,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([10, 10], 5, 15)
+	play_game([10, 10], 5, 10)

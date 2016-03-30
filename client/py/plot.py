@@ -45,33 +45,44 @@ def play_session(
 						"mines": mine_count
 					})
 
-	# TODO: progressbar for parallel jobs using pool.map_async
-	pool = multiprocessing.Pool(2)
-	results = pool.map(thread_map_fn, configs)
+	pool = multiprocessing.Pool(4)
+	results = pool.map_async(thread_map_fn, configs)
+	pool.close()
 
 	# Run w/ progress bar, now we know how many games there are
-	#counter = progressbar.ProgressBar(widgets=[
-	#	progressbar.widgets.Timer(format="%s"),
-	#	" | ",
-	#	progressbar.widgets.SimpleProgress(),
-	#])
+	counter = progressbar.ProgressBar(
+		widgets = [
+			progressbar.Timer(format="%s"),
+			" | ",
+			progressbar.SimpleProgress(),
+		],
+		maxval = len(results._value)
+	)
 
-	#for config in counter(configs):
-	#	results.append(ReactiveClient(
-	#		PythonInternalServer(config["dims"], config["mines"])
-	#	))
+	counter_run = counter.start()
+	while not results.ready():
+		count = len(results._value) - results._number_left * results._chunksize
+		counter_run.update(count)
+		time.sleep(0.5)
+	counter_run.finish()
 
-	return results
+	return results._value
 
 def thread_map_fn(config):
 	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
 
-games = play_session(
-	repeats_per_config = 100,
-	dim_length_range = (10, 11),
-	mine_count_range = (20, 30),
-	num_dims_range = (2, 3)
-)
+class PoolCounter(progressbar.Widget):
+	TIME_SENSITIVE = True
+
+	def __init__(self, results_list):
+		self.results = results_list
+		self.length = len(results_list)
+
+	def update(self, pbar):
+		return "{} of {}".format(
+			self.length - self.results.count(None),
+			self.length
+		)
 
 # Returns a dict of lists of games with identical configs
 def group_by_repeats(games):
@@ -97,9 +108,17 @@ def get_fraction_cleared(game):
 	)
 	return (empty_cell_count - game.server.cells_rem) / empty_cell_count
 
-# No. mines vs % games won
-scatter_plot(
-	group_by_repeats(games),
-	lambda g: g[0].server.mines,
-	lambda g: 100 * statistics.mean([1 if _g.server.win else 0 for _g in g])
-)
+if __name__ == "__main__":
+	games = play_session(
+		repeats_per_config = 10000,
+		dim_length_range = (2, 3),
+		mine_count_range = (1, 2),
+		num_dims_range = (2, 3)
+	)
+
+	# No. mines vs % games won
+	scatter_plot(
+		group_by_repeats(games),
+		lambda g: g[0].server.mines,
+		lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g])
+	)

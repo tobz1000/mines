@@ -3,7 +3,9 @@ import numpy
 import functools
 import itertools
 
-# Ghetto enums for cell value
+# Grid values
+# Use value of 1 directly for counting surrounding mines; ~20% game speedup
+# compared to checking val==MINE for each cell
 MINE = 1
 CLEAR = 0
 
@@ -37,7 +39,6 @@ class PythonInternalServer(object):
 	reload_id = None
 
 	# Whether the game server can be relied upon to auto-clear zero-cells.
-	# Allows for greater performance if so.
 	clears_zeroes = False
 
 	dims = None
