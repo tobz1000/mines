@@ -3,8 +3,7 @@ import numpy
 import functools
 import itertools
 
-# Ghetto enums for cell value; non-neg values are surround count for cleared
-# cells
+# Ghetto enums for cell value
 MINE = 1
 CLEAR = 0
 
@@ -30,6 +29,9 @@ def get_surrounding_coords(coords, dims):
 
 	return ret
 
+def count_empty_cells(dims, mines):
+	return functools.reduce(lambda x,y: x*y, dims) - mines
+
 class PythonInternalServer(object):
 	id = "py_internal_game"
 	reload_id = None
@@ -50,7 +52,7 @@ class PythonInternalServer(object):
 	def __init__(self, dims=None, mines=None):
 		self.dims = dims
 		self.mines = mines
-		self.cells_rem = functools.reduce(lambda x,y: x*y, dims) - mines
+		self.cells_rem = count_empty_cells(dims, mines)
 
 		# Create grid
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)

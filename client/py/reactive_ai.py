@@ -2,18 +2,21 @@
 import random
 import math
 import itertools
-import functools
 import time
 
 from server_json_wrapper import JSONServerWrapper
-from internal_server import PythonInternalServer, get_surrounding_coords
+from internal_server import (
+	PythonInternalServer,
+	get_surrounding_coords,
+	count_empty_cells
+)
 
 # TODO: command line arg '-v0/-v1' etc with 'argparse' package
 # 0: No output
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 1
+VERBOSITY = 2
 
 # Ghetto enum
 MINE = -1
@@ -248,9 +251,10 @@ def play_game(dims, mines, repeats=1):
 
 	for i in range(repeats):
 		played_games.append(ReactiveClient(PythonInternalServer(dims, mines)))
+		#played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
 
 	won = 0
-	empty_cell_count = functools.reduce(lambda x,y: x*y, dims) - mines
+	empty_cell_count = count_empty_cells(dims, mines)
 
 	totals = {
 		"cells_rem": 0,
@@ -285,4 +289,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([100, 100], 1000, 15)
+	play_game([10, 10], 5, 15)

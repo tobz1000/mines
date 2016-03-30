@@ -2,7 +2,6 @@
 import functools
 import math
 import multiprocessing
-#from multiprocessing.dummy import Pool as ThreadPool
 import statistics
 import scipy
 import statsmodels.api as sm
