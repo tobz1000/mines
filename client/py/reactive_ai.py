@@ -142,6 +142,10 @@ class ReactiveClient(object):
 				cell.unkn_surr_empt_cnt -= surr_mine_count
 
 	def get_guess_cell(self):
+		pass
+
+class ReactiveClientSimpleGuess(ReactiveClient):
+	def get_guess_cell(self):
 		# Just find first cleared cell with surrounding unknown empties
 		for cell in self.known_cells[EMPTY]:
 			if cell.unkn_surr_empt_cnt <= 0:

@@ -18,12 +18,27 @@ no_cores = multiprocessing.cpu_count()
 # on large game sets, with no noticeable performance impact (using the default
 # of 100)
 def get_chunksize(len, cores, max=100):
+	if len == 0:
+		return 0
+
 	chunksize, extra = divmod(len, cores * 4)
 	if extra:
 		chunksize += 1
 	return min(max, chunksize)
 
+# Game-running functions. Must be non-dynamic, top-level to work with the pickle
+# library used by multiprocessing.
+
+def play_game_no_guess(config):
+	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
+
+def play_game_simple_guess(config):
+	return ReactiveClientSimpleGuess(
+		PythonInternalServer(config["dims"], config["mines"])
+	)
+
 def play_session(
+	game_run_func,
 	repeats_per_config = 10,
 	dim_length_range = (4, 21, 4), # range() params
 	mine_count_range = (4, 21, 4),
@@ -31,7 +46,6 @@ def play_session(
 	num_dims_range = (2, 3)
 ):
 	configs = []
-	results = []
 
 	# Get a list of all game parameters first
 	for num_dims in range(*num_dims_range):
@@ -59,7 +73,7 @@ def play_session(
 
 	pool = multiprocessing.Pool(no_cores)
 	results = pool.map_async(
-		thread_map_fn,
+		game_run_func,
 		configs,
 		chunksize = get_chunksize(len(configs), no_cores)
 	)
@@ -84,9 +98,6 @@ def play_session(
 
 	return results._value
 
-def thread_map_fn(config):
-	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
-
 class PoolCounter(progressbar.Widget):
 	TIME_SENSITIVE = True
 
@@ -110,14 +121,6 @@ def group_by_repeats(games):
 		games_by_config[key].append(g)
 	return games_by_config.values()
 
-def scatter_plot(instances, x_fn, y_fn):
-	pyplot.scatter([x_fn(i) for i in instances], [y_fn(i) for i in instances])
-
-	# TODO: line fit: http://stackoverflow.com/a/19069028
-
-	# TODO: get pyplot.show() working...
-	pyplot.savefig('img.png')
-
 def get_fraction_cleared(game):
 	empty_cell_count = (
 		functools.reduce(lambda x,y: x*y, game.server.dims) - game.server.mines
@@ -125,16 +128,37 @@ def get_fraction_cleared(game):
 	return (empty_cell_count - game.server.cells_rem) / empty_cell_count
 
 if __name__ == "__main__":
-	games = play_session(
-		repeats_per_config = 1000,
-		dim_length_range = (6, 7),
-		mine_count_range = (7, 17),
-		num_dims_range = (2, 3)
-	)
 
-	# No. mines vs % games won
-	scatter_plot(
-		group_by_repeats(games),
-		lambda g: g[0].server.mines,
-		lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g])
-	)
+	plot_clients = {
+		"blue" : play_game_no_guess,
+		"red" : play_game_simple_guess
+	}
+
+	def scatter_plot(instances, x_fn, y_fn, colour):
+		pyplot.scatter(
+			[x_fn(i) for i in instances],
+			[y_fn(i) for i in instances],
+			c=colour
+		)
+
+	# TODO: line fit: http://stackoverflow.com/a/19069028
+
+	for (colour, fn) in plot_clients.items():
+		games = play_session(
+			fn,
+			repeats_per_config = 500,
+			dim_length_range = (6, 7),
+			mine_count_range = (1, 16),
+			num_dims_range = (2, 3)
+		)
+
+		# No. mines vs % games won
+		scatter_plot(
+			group_by_repeats(games),
+			lambda g: g[0].server.mines,
+			lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g]),
+			colour
+		)
+
+	# TODO: get pyplot.show() working...
+	pyplot.savefig('img.png')
