@@ -27,7 +27,7 @@ def play_session(
 			cell_count = dim_length ** num_dims
 
 			if cell_mine_ratio_range is not None:
-				# setify to remove dups (messes up order but that's okay)
+				# setify to remove dups
 				mine_counts = list(set(
 					math.floor(cell_count/m)
 					for m in range(*cell_mine_ratio_range)
