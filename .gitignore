@@ -1,2 +1,17 @@
 saves/
-**/node_modules
+
+# npm files
+node_modules
+
+# pyvenv files
+__pycache__
+.Python
+[Bb]in
+[Ii]nclude
+[Ll]ib
+[Ll]ib64
+[Ll]ocal
+[Ss]cripts
+pyvenv.cfg
+.venv
+pip-selfcheck.json
