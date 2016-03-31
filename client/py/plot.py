@@ -39,11 +39,11 @@ def play_session(
 			mine_counts = [m for m in mine_counts if m < cell_count and m > 0]
 
 			for mine_count in mine_counts:
-				for i in range(repeats_per_config):
-					configs.append({
-						"dims": [dim_length] * num_dims,
-						"mines": mine_count
-					})
+				configs.append({
+					"dims": [dim_length] * num_dims,
+					"mines": mine_count,
+					"repeats": repeats_per_config
+				})
 
 	pool = multiprocessing.Pool(4)
 	results = pool.map_async(thread_map_fn, configs)
@@ -69,20 +69,12 @@ def play_session(
 	return results._value
 
 def thread_map_fn(config):
-	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
-
-class PoolCounter(progressbar.Widget):
-	TIME_SENSITIVE = True
-
-	def __init__(self, results_list):
-		self.results = results_list
-		self.length = len(results_list)
-
-	def update(self, pbar):
-		return "{} of {}".format(
-			self.length - self.results.count(None),
-			self.length
-		)
+	games = []
+	server = PythonInternalServer(config["dims"], config["mines"])
+	for i in range(config["repeats"]):
+		server.new_game()
+		games.append(ReactiveClient(server))
+	return games
 
 # Returns a dict of lists of games with identical configs
 def group_by_repeats(games):
@@ -110,15 +102,15 @@ def get_fraction_cleared(game):
 
 if __name__ == "__main__":
 	games = play_session(
-		repeats_per_config = 10000,
-		dim_length_range = (2, 3),
-		mine_count_range = (1, 2),
+		repeats_per_config = 3000,
+		dim_length_range = (6, 13),
+		mine_count_range = (10, 15),
 		num_dims_range = (2, 3)
 	)
 
 	# No. mines vs % games won
 	scatter_plot(
-		group_by_repeats(games),
+		games,
 		lambda g: g[0].server.mines,
 		lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g])
 	)

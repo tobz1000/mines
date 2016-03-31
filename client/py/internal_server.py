@@ -45,6 +45,7 @@ class PythonInternalServer(object):
 	mines = None
 
 	cells_rem = None
+	started = False
 	game_over = False
 	win = False
 
@@ -57,11 +58,10 @@ class PythonInternalServer(object):
 
 		# Create grid
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)
-		self.game_grid.fill(CLEAR)
-		self.game_grid.ravel()[:mines].fill(MINE)
-		numpy.random.shuffle(self.game_grid.ravel())
+		self.new_game()
 
 	def clear_cells(self, coords_list):
+		self.started = True
 		cleared_cells = []
 		for coords in coords_list:
 			if self.game_grid[coords] == MINE:
@@ -87,3 +87,12 @@ class PythonInternalServer(object):
 			self.game_over = True
 
 		return cleared_cells
+
+	def new_game(self):
+		if not self.started:
+			return
+		#self.game_grid = numpy.ndarray(self.dims, dtype=int)
+		self.game_grid.fill(CLEAR)
+		self.game_grid.ravel()[:self.mines].fill(MINE)
+		numpy.random.shuffle(self.game_grid.ravel())
+		self.started = False
