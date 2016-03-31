@@ -26,17 +26,6 @@ def get_chunksize(len, cores, max=100):
 		chunksize += 1
 	return min(max, chunksize)
 
-# Game-running functions. Must be non-dynamic, top-level to work with the pickle
-# library used by multiprocessing.
-
-def play_game_no_guess(config):
-	return ReactiveClient(PythonInternalServer(config["dims"], config["mines"]))
-
-def play_game_simple_guess(config):
-	return ReactiveClientSimpleGuess(
-		PythonInternalServer(config["dims"], config["mines"])
-	)
-
 def play_session(
 	game_run_func,
 	repeats_per_config = 10,
@@ -129,16 +118,29 @@ def get_fraction_cleared(game):
 
 if __name__ == "__main__":
 
+	# Game-running functions. Must be non-dynamic, top-level to work with the
+	# pickle library used by multiprocessing.
+	def play_game_no_guess(config):
+		return ReactiveClient(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
+	def play_game_simple_guess(config):
+		return ReactiveClientSimpleGuess(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
 	plot_clients = {
 		"blue" : play_game_no_guess,
 		"red" : play_game_simple_guess
 	}
 
-	def scatter_plot(instances, x_fn, y_fn, colour):
-		pyplot.scatter(
+	def plot(instances, x_fn, y_fn, colour):
+		instances = sorted(instances, key=x_fn)
+		pyplot.plot(
 			[x_fn(i) for i in instances],
 			[y_fn(i) for i in instances],
-			c=colour
+			c=colour,
 		)
 
 	# TODO: line fit: http://stackoverflow.com/a/19069028
@@ -153,7 +155,7 @@ if __name__ == "__main__":
 		)
 
 		# No. mines vs % games won
-		scatter_plot(
+		plot(
 			group_by_repeats(games),
 			lambda g: g[0].server.mines,
 			lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g]),
