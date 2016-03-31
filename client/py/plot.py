@@ -11,6 +11,18 @@ import progressbar # github.com/coagulant/progressbar-python3
 
 from reactive_ai import *
 
+no_cores = multiprocessing.cpu_count()
+
+# Chunksize for pools as calculated in multiprocessing module, but with the
+# addition of a specified cap. Allows for more frequent progress counter updates
+# on large game sets, with no noticeable performance impact (using the default
+# of 100)
+def get_chunksize(len, cores, max=100):
+	chunksize, extra = divmod(len, cores * 4)
+	if extra:
+		chunksize += 1
+	return min(max, chunksize)
+
 def play_session(
 	repeats_per_config = 10,
 	dim_length_range = (4, 21, 4), # range() params
@@ -45,8 +57,12 @@ def play_session(
 						"mines": mine_count
 					})
 
-	pool = multiprocessing.Pool(4)
-	results = pool.map_async(thread_map_fn, configs)
+	pool = multiprocessing.Pool(no_cores)
+	results = pool.map_async(
+		thread_map_fn,
+		configs,
+		chunksize = get_chunksize(len(configs), no_cores)
+	)
 	pool.close()
 
 	# Run w/ progress bar, now we know how many games there are
@@ -61,7 +77,7 @@ def play_session(
 
 	counter_run = counter.start()
 	while not results.ready():
-		count = len(results._value) - results._number_left * results._chunksize
+		count = len(results._value) - results._value.count(None)
 		counter_run.update(count)
 		time.sleep(0.5)
 	counter_run.finish()
@@ -110,9 +126,9 @@ def get_fraction_cleared(game):
 
 if __name__ == "__main__":
 	games = play_session(
-		repeats_per_config = 10000,
-		dim_length_range = (2, 3),
-		mine_count_range = (1, 2),
+		repeats_per_config = 1000,
+		dim_length_range = (6, 7),
+		mine_count_range = (7, 17),
 		num_dims_range = (2, 3)
 	)
 

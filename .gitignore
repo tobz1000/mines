@@ -1,4 +1,4 @@
-saves/
+/server/js/saves/
 
 # npm files
 node_modules
