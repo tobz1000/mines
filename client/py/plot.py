@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as pyplot
 import progressbar # github.com/coagulant/progressbar-python3
 
-from reactive_ai import *
+from guess_ais import *
 
 no_cores = multiprocessing.cpu_count()
 
@@ -117,7 +117,6 @@ def get_fraction_cleared(game):
 	return (empty_cell_count - game.server.cells_rem) / empty_cell_count
 
 if __name__ == "__main__":
-
 	# Game-running functions. Must be non-dynamic, top-level to work with the
 	# pickle library used by multiprocessing.
 	def play_game_no_guess(config):
@@ -126,39 +125,58 @@ if __name__ == "__main__":
 		)
 
 	def play_game_simple_guess(config):
-		return ReactiveClientSimpleGuess(
+		return ReactiveClientGuess(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
+	def play_game_count_empties(config):
+		return ReactiveClientCountEmpties(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
+	def play_game_avg_empties(config):
+		return ReactiveClientAvgEmpties(
 			PythonInternalServer(config["dims"], config["mines"])
 		)
 
 	plot_clients = {
 		"blue" : play_game_no_guess,
-		"red" : play_game_simple_guess
+		"red" : play_game_simple_guess,
+		"yellow" : play_game_count_empties,
+		"green" : play_game_avg_empties,
 	}
 
-	def plot(instances, x_fn, y_fn, colour):
+	# Option to assume games with zero mines would always be won, to save time
+	# actually playing them.
+	def plot(instances, x_fn, y_fn, colour, add_zero_mine=True):
 		instances = sorted(instances, key=x_fn)
 		pyplot.plot(
-			[x_fn(i) for i in instances],
-			[y_fn(i) for i in instances],
+			([0] if add_zero_mine else []) + [x_fn(i) for i in instances],
+			([100] if add_zero_mine else []) + [y_fn(i) for i in instances],
 			c=colour,
 		)
 
-	# TODO: line fit: http://stackoverflow.com/a/19069028
-
-	for (colour, fn) in plot_clients.items():
+	for (colour, game_function) in plot_clients.items():
 		games = play_session(
-			fn,
-			repeats_per_config = 500,
+			game_function,
+			repeats_per_config = 2000,
 			dim_length_range = (6, 7),
-			mine_count_range = (1, 16),
+			mine_count_range = (1, 17),
 			num_dims_range = (2, 3)
 		)
+
+		# Pools return Exception object instead of the list, if one is raised in
+		# in a subprocess
+		if type(games) != list:
+			raise games
 
 		# No. mines vs % games won
 		plot(
 			group_by_repeats(games),
 			lambda g: g[0].server.mines,
-			lambda g: statistics.mean([1 if _g.server.win else 0 for _g in g]),
+			lambda g: 100 * statistics.mean(
+				[1 if _g.server.win else 0 for _g in g]
+			),
 			colour
 		)
 

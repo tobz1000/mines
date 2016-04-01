@@ -144,17 +144,6 @@ class ReactiveClient(object):
 	def get_guess_cell(self):
 		pass
 
-class ReactiveClientSimpleGuess(ReactiveClient):
-	def get_guess_cell(self):
-		# Just find first cleared cell with surrounding unknown empties
-		for cell in self.known_cells[EMPTY]:
-			if cell.unkn_surr_empt_cnt <= 0:
-				continue
-
-			for surr_cell in cell.surr_cells:
-				if surr_cell.state == UNKNOWN:
-					return surr_cell
-
 class GameGrid(dict):
 	def __init__(self, parent_game):
 		self.parent_game = parent_game
