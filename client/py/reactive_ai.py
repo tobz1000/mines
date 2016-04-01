@@ -83,13 +83,15 @@ class ReactiveClient(object):
 		except GameEnd as e:
 			pass
 
+	def random_coords(self):
+		return tuple(
+			math.floor(random.random() * dim) for dim in self.server.dims
+		)
+
 	def play(self, first_coords):
 		self.start_time = time.time()
 		if first_coords == None:
-			first_coords = tuple(
-				math.floor(random.random()
-					* dim) for dim in self.server.dims
-			)
+			first_coords = self.random_coords()
 
 		if first_coords == 0:
 			first_coords = (0,) * len(self.server.dims)

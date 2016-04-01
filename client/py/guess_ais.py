@@ -60,3 +60,11 @@ class ReactiveClientAvgEmpties(ReactiveClientGuess):
 				surr_surr_counts.items(),
 				key=empty_fraction
 			)[0]
+
+# Just pick something.
+class ReactiveClientGuessAny(ReactiveClient):
+	def get_guess_cell(self):
+		while True:
+			cell = self.game_grid[self.random_coords()]
+			if cell.state == UNKNOWN:
+				return cell

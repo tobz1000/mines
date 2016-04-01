@@ -87,19 +87,6 @@ def play_session(
 
 	return results._value
 
-class PoolCounter(progressbar.Widget):
-	TIME_SENSITIVE = True
-
-	def __init__(self, results_list):
-		self.results = results_list
-		self.length = len(results_list)
-
-	def update(self, pbar):
-		return "{} of {}".format(
-			self.length - self.results.count(None),
-			self.length
-		)
-
 # Returns a dict of lists of games with identical configs
 def group_by_repeats(games):
 	games_by_config = {}
@@ -139,11 +126,17 @@ if __name__ == "__main__":
 			PythonInternalServer(config["dims"], config["mines"])
 		)
 
+	def play_game_guess_any(config):
+		return ReactiveClientGuessAny(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
 	plot_clients = {
 		"blue" : play_game_no_guess,
 		"red" : play_game_simple_guess,
 		"yellow" : play_game_count_empties,
 		"green" : play_game_avg_empties,
+		"cyan" : play_game_guess_any,
 	}
 
 	# Option to assume games with zero mines would always be won, to save time
@@ -161,7 +154,7 @@ if __name__ == "__main__":
 			game_function,
 			repeats_per_config = 2000,
 			dim_length_range = (6, 7),
-			mine_count_range = (1, 17),
+			mine_count_range = (1, 4),
 			num_dims_range = (2, 3)
 		)
 
