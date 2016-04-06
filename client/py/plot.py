@@ -85,7 +85,7 @@ def play_session(
 		time.sleep(0.5)
 	counter_run.finish()
 
-	return results._value
+	return results.get()
 
 # Returns a dict of lists of games with identical configs
 def group_by_repeats(games):
@@ -126,23 +126,38 @@ if __name__ == "__main__":
 			PythonInternalServer(config["dims"], config["mines"])
 		)
 
+	def play_game_avg_empties_all(config):
+		return ReactiveClientAvgEmptiesAll(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
 	def play_game_guess_any(config):
 		return ReactiveClientGuessAny(
 			PythonInternalServer(config["dims"], config["mines"])
 		)
 
+	def play_game_exhaustive(config):
+		return ReactiveClientExhaustiveTest(
+			PythonInternalServer(config["dims"], config["mines"])
+		)
+
 	plot_clients = {
-		"blue" : play_game_no_guess,
-		"red" : play_game_simple_guess,
-		"yellow" : play_game_count_empties,
+		#"blue" : play_game_no_guess,
+		#"red" : play_game_simple_guess,
+		#"yellow" : play_game_count_empties,
+		#"cyan" : play_game_guess_any,
 		"green" : play_game_avg_empties,
-		"cyan" : play_game_guess_any,
+		"orange" : play_game_avg_empties_all,
+		"purple" : play_game_exhaustive,
 	}
 
 	# Option to assume games with zero mines would always be won, to save time
 	# actually playing them.
 	def plot(instances, x_fn, y_fn, colour, add_zero_mine=True):
+		if len(instances) < 1:
+			raise Exception("No game instances to plot")
 		instances = sorted(instances, key=x_fn)
+		add_zero_mine = add_zero_mine and x_fn(instances[0]) == 1
 		pyplot.plot(
 			([0] if add_zero_mine else []) + [x_fn(i) for i in instances],
 			([100] if add_zero_mine else []) + [y_fn(i) for i in instances],
@@ -152,16 +167,11 @@ if __name__ == "__main__":
 	for (colour, game_function) in plot_clients.items():
 		games = play_session(
 			game_function,
-			repeats_per_config = 2000,
+			repeats_per_config = 50,
 			dim_length_range = (6, 7),
-			mine_count_range = (1, 4),
+			mine_count_range = (7, 11),
 			num_dims_range = (2, 3)
 		)
-
-		# Pools return Exception object instead of the list, if one is raised in
-		# in a subprocess
-		if type(games) != list:
-			raise games
 
 		# No. mines vs % games won
 		plot(

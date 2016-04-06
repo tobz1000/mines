@@ -52,12 +52,16 @@ class GameEnd(Exception):
 
 class ReactiveClient(object):
 	game_grid = None
+	known_cells = None
 	password = "pass"
 	game_over = False
 	win = False
 	turns_hash_sum = 0
 	start_time = None
 	wait_time = None
+
+	# Types of cell to track in reverse-lookup dicts
+	cell_state_lookups = [ TO_CLEAR, EMPTY ]
 
 	def __init__(self, server, first_coords=None):
 		self.server = server
@@ -66,10 +70,7 @@ class ReactiveClient(object):
 		self.game_grid = GameGrid(self)
 
 		# Reverse lookup table for grid
-		self.known_cells = {
-			TO_CLEAR: [],
-			EMPTY: []
-		}
+		self.known_cells = { s : [] for s in self.cell_state_lookups }
 
 		log(3, "New game: {} (original {}) dims: {} mines: {}".format(
 			self.server.id,
@@ -87,6 +88,9 @@ class ReactiveClient(object):
 		return tuple(
 			math.floor(random.random() * dim) for dim in self.server.dims
 		)
+
+	def all_coords(self):
+		return itertools.product(*(range(c) for c in self.server.dims))
 
 	def play(self, first_coords):
 		self.start_time = time.time()
@@ -220,7 +224,6 @@ class Cell(object):
 
 	@unkn_surr_mine_cnt.setter
 	def unkn_surr_mine_cnt(self, val):
-		#if val == 0: log(0, "{} ==> {}".format(self._unkn_surr_mine_cnt, val))
 		if val == 0 and self.state == EMPTY:
 			for cell in self.surr_cells:
 				if cell.state == UNKNOWN:
