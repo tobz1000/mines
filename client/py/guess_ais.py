@@ -5,6 +5,9 @@ from reactive_ai import *
 
 # Just finds first cleared cell with surrounding unknown empties.
 class ReactiveClientGuess(ReactiveClient):
+	# TODO: Refactor to use the function inReactiveClientExhaustiveTest, and see
+	# if speed is noticeably affected. If not, just replace all the
+	# get_adjacent_unknown_cells functions with that one.
 	def get_adjacent_unknown_cells(self):
 		# TODO: Sometimes returns None; figure out the situation that causes
 		# this and see what might be the next best thing to do (just pick random
@@ -85,7 +88,6 @@ class ReactiveClientAvgEmpties(ReactiveClientGuess):
 		return empty_count / ((empty_count + mine_count) or 1)
 
 class ReactiveClientAvgEmptiesAll(ReactiveClientAvgEmpties):
-
 	def get_guess_cell(self):
 		return self.get_best_scoring_unknown(
 			self.get_all_unknown_cells,
@@ -115,6 +117,18 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 	# replacing it.
 	cell_state_lookups = [ TO_CLEAR, EMPTY, MINE ]
 
+	def get_adjacent_unknown_cells(self):
+		# TODO: Sometimes returns None; figure out the situation that causes
+		# this and see what might be the next best thing to do (just pick random
+		# unknown?)
+		for surr_empt_cell in self.known_cells[EMPTY]:
+			if surr_empt_cell.unkn_surr_empt_cnt <= 0:
+				continue
+
+			for unk_cell in surr_empt_cell.surr_cells:
+				if unk_cell.state == UNKNOWN:
+					yield unk_cell
+
 	def get_guess_cell(self):
 		# For each cleared mine, check that this configuration gives it the
 		# correct number of new surrounding mines.
@@ -131,31 +145,54 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 					return False
 			return True
 
+		# Combine sets into disjoint groups. Destructive to supplied 'sets'..
+		def combine_overlaps(sets):
+			for ((ai, a), (bi, b)) in itertools.combinations(
+				enumerate(sets),
+				2
+			):
+				if not a or not b:
+					continue
+
+				if not a.isdisjoint(b):
+					a |= b
+					sets[bi] = None
+
+			return [s for s in sets if s]
+
 		mines_left = self.server.mines - len(self.known_cells[MINE])
-		edge_cells = frozenset(c[0] for c in self.get_adjacent_unknown_cells())
+		edge_cells = frozenset(self.get_adjacent_unknown_cells())
 		edge_mine_tally = { c : 0 for c in edge_cells }
+
+		if self.split_edge_cells:
+			# Divide edge_cells into groups based on contact with one another.
+			edge_cell_sets = combine_overlaps(
+				[(set(c.surr_cells) | {c}) & edge_cells for c in edge_cells]
+			)
+		else:
+			edge_cell_sets = [ edge_cells ]
 
 		# For each possible number of mines on the edge, see which combinations
 		# are possible, and tally the placement count in each edge cell.
-		# TODO: Break up edge mines further to reduce no. of combinations
+		# TODO: Break up edge mines further to reduce no. of combinations (using
+		# edge_cell_sets above)
 		# TODO: weight this based on nCr(inner cells, inner mines) for each
 		# num_edge_mines value.
-		for num_edge_mines in range(1, min(len(edge_cells), mines_left) + 1):
-			for mine_combo in (frozenset(m) for m in itertools.combinations(
-				edge_cells,
-				num_edge_mines
-			)):
-				if test_valid(mine_combo):
-					for cell in mine_combo:
-						edge_mine_tally[cell] += 1
+		for cell_set in edge_cell_sets:
+			print(len(cell_set), min(len(cell_set), mines_left))
+			for num_edge_mines in range(1, min(len(cell_set), mines_left) + 1):
+				for mine_combo in (frozenset(m) for m in itertools.combinations(
+					cell_set,
+					num_edge_mines
+				)):
+					if test_valid(mine_combo):
+						for cell in mine_combo:
+							edge_mine_tally[cell] += 1
 
 		if len(edge_mine_tally) == 0:
 			return None
 
 		return min(edge_mine_tally.items(), key=lambda c: c[1])[0]
 
-		# unknown_coords = (
-		# 	c for c in self.all_coords() if self.game_grid[c].state == UNKNOWN
-		# )
-		# combs = itertools.combinations(unknown_coords, mines_left)
-		# print("{} -> {}".format(mines_left, sum(1 for c in combs)))
+class ReactiveClientExhaustiveSplit(ReactiveClientExhaustiveTest):
+	split_edge_cells = True

@@ -35,6 +35,7 @@ def play_session(
 	num_dims_range = (2, 3)
 ):
 	configs = []
+	seeds = np.random.randint(0, 10000, repeats_per_config)
 
 	# Get a list of all game parameters first
 	for num_dims in range(*num_dims_range):
@@ -54,17 +55,19 @@ def play_session(
 			mine_counts = [m for m in mine_counts if m < cell_count and m > 0]
 
 			for mine_count in mine_counts:
-				for i in range(repeats_per_config):
+				for seed in seeds:
 					configs.append({
 						"dims": [dim_length] * num_dims,
-						"mines": mine_count
+						"mines": mine_count,
+						"seed" : seed
 					})
 
 	pool = multiprocessing.Pool(no_cores)
 	results = pool.map_async(
 		game_run_func,
 		configs,
-		chunksize = get_chunksize(len(configs), no_cores)
+		#chunksize = get_chunksize(len(configs), no_cores)
+		chunksize = 1
 	)
 	pool.close()
 
@@ -108,47 +111,88 @@ if __name__ == "__main__":
 	# pickle library used by multiprocessing.
 	def play_game_no_guess(config):
 		return ReactiveClient(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_simple_guess(config):
 		return ReactiveClientGuess(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_count_empties(config):
 		return ReactiveClientCountEmpties(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_avg_empties(config):
 		return ReactiveClientAvgEmpties(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_avg_empties_all(config):
 		return ReactiveClientAvgEmptiesAll(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_guess_any(config):
 		return ReactiveClientGuessAny(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
 	def play_game_exhaustive(config):
 		return ReactiveClientExhaustiveTest(
-			PythonInternalServer(config["dims"], config["mines"])
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
 		)
 
+	def play_game_exhaustive_split(config):
+		return ReactiveClientExhaustiveSplit(
+			PythonInternalServer(
+				config["dims"],
+				config["mines"],
+				config["seed"]
+			)
+		)
+
+	# TODO: play_game_no_guess occasionally wins more than
+	# play_game_simple_guess, with pre-seeded game. I can't see how that's
+	# possible. Investigate.
 	plot_clients = {
-		#"blue" : play_game_no_guess,
-		#"red" : play_game_simple_guess,
+		"blue" : play_game_no_guess,
+		"red" : play_game_simple_guess,
 		#"yellow" : play_game_count_empties,
 		#"cyan" : play_game_guess_any,
 		"green" : play_game_avg_empties,
-		"orange" : play_game_avg_empties_all,
-		"purple" : play_game_exhaustive,
+		#"orange" : play_game_avg_empties_all,
+		#"purple" : play_game_exhaustive,
+		#"pink" : play_game_exhaustive_split,
 	}
 
 	# Option to assume games with zero mines would always be won, to save time
@@ -167,9 +211,9 @@ if __name__ == "__main__":
 	for (colour, game_function) in plot_clients.items():
 		games = play_session(
 			game_function,
-			repeats_per_config = 50,
+			repeats_per_config = 4,
 			dim_length_range = (6, 7),
-			mine_count_range = (7, 11),
+			mine_count_range = (1, 16),
 			num_dims_range = (2, 3)
 		)
 
