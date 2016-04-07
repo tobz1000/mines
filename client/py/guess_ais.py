@@ -116,6 +116,7 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 	# TODO: add to the cell_state_lookups list in the superclass, instead of
 	# replacing it.
 	cell_state_lookups = [ TO_CLEAR, EMPTY, MINE ]
+	split_edge_cells = False
 
 	def get_adjacent_unknown_cells(self):
 		# TODO: Sometimes returns None; figure out the situation that causes

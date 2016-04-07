@@ -12,13 +12,32 @@ import progressbar # github.com/coagulant/progressbar-python3
 
 from guess_ais import *
 
+REPEATS_PER_CONFIG = 2000
+DIMS_LEN = 6
+NUM_DIMS = 2
+SEEDS_SEED = 7
+
+# Reduce this when using very slow clients
+POOL_MAX_CHUNKSIZE = 100
+
 no_cores = multiprocessing.cpu_count()
+
+plot_clients = [
+	("blue", ReactiveClient),
+	("red", ReactiveClientGuess),
+	("yellow", ReactiveClientCountEmpties),
+	("cyan", ReactiveClientGuessAny),
+	("green", ReactiveClientAvgEmpties),
+	("orange", ReactiveClientAvgEmptiesAll),
+	#("purple", ReactiveClientExhaustiveTest),
+	#("pink", ReactiveClientExhaustiveSplit),
+]
 
 # Chunksize for pools as calculated in multiprocessing module, but with the
 # addition of a specified cap. Allows for more frequent progress counter updates
 # on large game sets, with no noticeable performance impact (using the default
 # of 100)
-def get_chunksize(len, cores, max=100):
+def get_chunksize(len, cores, max=POOL_MAX_CHUNKSIZE):
 	if len == 0:
 		return 0
 
@@ -29,12 +48,12 @@ def get_chunksize(len, cores, max=100):
 
 def play_session(
 	client,
-	repeats_per_config = 10,
-	dim_length_range = (4, 21, 4), # range() params
-	mine_count_range = (4, 21, 4),
+	repeats_per_config = REPEATS_PER_CONFIG,
+	dim_length_range = (DIMS_LEN, DIMS_LEN + 1), # range() params
+	mine_count_range = (1, int((DIMS_LEN ** NUM_DIMS) / 2) + 1),
 	cell_mine_ratio_range = None, # Alternative parameter to mine count
-	num_dims_range = (2, 3),
-	seeds_seed = None
+	num_dims_range = (NUM_DIMS, NUM_DIMS + 1),
+	seeds_seed = SEEDS_SEED
 ):
 	configs = []
 
@@ -82,6 +101,7 @@ def play_session(
 			progressbar.Timer(format="%s"),
 			" | ",
 			progressbar.SimpleProgress(),
+			" | " + client.__name__
 		],
 		maxval = len(results._value)
 	)
@@ -120,25 +140,13 @@ if __name__ == "__main__":
 				config["dims"],
 				config["mines"],
 				config["seed"]
-			)
+			),
+			first_coords=0
 		)
-
-	# TODO: ReactiveClient (without guesses) occasionally wins more than others,
-	# with pre-seeded games. I can't see how that's possible. Investigate.
-	plot_clients = {
-		"blue" : ReactiveClient,
-		"red" : ReactiveClientGuess,
-		"yellow" : ReactiveClientCountEmpties,
-		"cyan" : ReactiveClientGuessAny,
-		"green" : ReactiveClientAvgEmpties,
-		"orange" : ReactiveClientAvgEmptiesAll,
-		#"purple" : ReactiveClientExhaustiveTest,
-		#"pink" : ReactiveClientExhaustiveSplit,
-	}
 
 	# Option to assume games with zero mines would always be won, to save time
 	# actually playing them.
-	def plot(instances, x_fn, y_fn, colour, add_zero_mine=True):
+	def plot(instances, x_fn, y_fn, label, colour, add_zero_mine=True):
 		if len(instances) < 1:
 			raise Exception("No game instances to plot")
 		instances = sorted(instances, key=x_fn)
@@ -146,18 +154,14 @@ if __name__ == "__main__":
 		pyplot.plot(
 			([0] if add_zero_mine else []) + [x_fn(i) for i in instances],
 			([100] if add_zero_mine else []) + [y_fn(i) for i in instances],
-			c=colour,
+			c = colour,
+			label = label
 		)
 
-	for (colour, client) in plot_clients.items():
-		games = play_session(
-			client,
-			repeats_per_config = 5,
-			dim_length_range = (6, 7),
-			mine_count_range = (1, 17),
-			num_dims_range = (2, 3),
-			seeds_seed = 0
-		)
+	(figure, axes) = pyplot.subplots()
+
+	for (colour, client) in plot_clients:
+		games = play_session(client)
 
 		# No. mines vs % games won
 		plot(
@@ -166,9 +170,19 @@ if __name__ == "__main__":
 			lambda g: 100 * statistics.mean(
 				[1 if _g.server.win else 0 for _g in g]
 			),
+			client.__name__,
 			colour
 		)
 
+	# Set graph output settings and render
+	for spine in axes.spines.values():
+		spine.set_visible(False)
 	# TODO: get pyplot.show() working...
+	pyplot.legend()
+	pyplot.title("Mines {} grid, {} games per configuration".format(
+		"{}".format(DIMS_LEN) + "x{}".format(DIMS_LEN) * (NUM_DIMS - 1),
+		REPEATS_PER_CONFIG
+	))
+	pyplot.xlabel('No. mines')
+	pyplot.ylabel('% Won')
 	pyplot.savefig('img.png')
-
