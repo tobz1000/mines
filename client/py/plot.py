@@ -28,7 +28,7 @@ def get_chunksize(len, cores, max=100):
 	return min(max, chunksize)
 
 def play_session(
-	game_run_func,
+	client,
 	repeats_per_config = 10,
 	dim_length_range = (4, 21, 4), # range() params
 	mine_count_range = (4, 21, 4),
@@ -62,6 +62,7 @@ def play_session(
 			for mine_count in mine_counts:
 				for seed in seeds:
 					configs.append({
+						"client": client,
 						"dims": [dim_length] * num_dims,
 						"mines": mine_count,
 						"seed" : seed
@@ -69,10 +70,9 @@ def play_session(
 
 	pool = multiprocessing.Pool(no_cores)
 	results = pool.map_async(
-		game_run_func,
+		play_game,
 		configs,
-		#chunksize = get_chunksize(len(configs), no_cores)
-		chunksize = 1
+		chunksize = get_chunksize(len(configs), no_cores)
 	)
 	pool.close()
 
@@ -112,10 +112,10 @@ def get_fraction_cleared(game):
 	return (empty_cell_count - game.server.cells_rem) / empty_cell_count
 
 if __name__ == "__main__":
-	# Game-running functions. Must be non-dynamic, top-level to work with the
+	# Game-running function. Must be non-dynamic, top-level to work with the
 	# pickle library used by multiprocessing.
-	def play_game_no_guess(config):
-		return ReactiveClient(
+	def play_game(config):
+		return config["client"](
 			PythonInternalServer(
 				config["dims"],
 				config["mines"],
@@ -123,81 +123,17 @@ if __name__ == "__main__":
 			)
 		)
 
-	def play_game_simple_guess(config):
-		return ReactiveClientGuess(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_count_empties(config):
-		return ReactiveClientCountEmpties(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_avg_empties(config):
-		return ReactiveClientAvgEmpties(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_avg_empties_all(config):
-		return ReactiveClientAvgEmptiesAll(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_guess_any(config):
-		return ReactiveClientGuessAny(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_exhaustive(config):
-		return ReactiveClientExhaustiveTest(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	def play_game_exhaustive_split(config):
-		return ReactiveClientExhaustiveSplit(
-			PythonInternalServer(
-				config["dims"],
-				config["mines"],
-				config["seed"]
-			)
-		)
-
-	# TODO: play_game_no_guess occasionally wins more than
-	# play_game_simple_guess, with pre-seeded game. I can't see how that's
-	# possible. Investigate.
+	# TODO: ReactiveClient (without guesses) occasionally wins more than others,
+	# with pre-seeded games. I can't see how that's possible. Investigate.
 	plot_clients = {
-		"blue" : play_game_no_guess,
-		"red" : play_game_simple_guess,
-		"yellow" : play_game_count_empties,
-		"cyan" : play_game_guess_any,
-		"green" : play_game_avg_empties,
-		"orange" : play_game_avg_empties_all,
-		#"purple" : play_game_exhaustive,
-		#"pink" : play_game_exhaustive_split,
+		"blue" : ReactiveClient,
+		"red" : ReactiveClientGuess,
+		"yellow" : ReactiveClientCountEmpties,
+		"cyan" : ReactiveClientGuessAny,
+		"green" : ReactiveClientAvgEmpties,
+		"orange" : ReactiveClientAvgEmptiesAll,
+		#"purple" : ReactiveClientExhaustiveTest,
+		#"pink" : ReactiveClientExhaustiveSplit,
 	}
 
 	# Option to assume games with zero mines would always be won, to save time
@@ -213,9 +149,9 @@ if __name__ == "__main__":
 			c=colour,
 		)
 
-	for (colour, game_function) in plot_clients.items():
+	for (colour, client) in plot_clients.items():
 		games = play_session(
-			game_function,
+			client,
 			repeats_per_config = 5,
 			dim_length_range = (6, 7),
 			mine_count_range = (1, 17),
