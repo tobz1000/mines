@@ -1,5 +1,6 @@
 #!/usr/bin/env python3.4
 import itertools
+import functools
 
 from reactive_ai import *
 
@@ -88,6 +89,8 @@ class ReactiveClientAvgEmpties(ReactiveClientGuess):
 		return empty_count / ((empty_count + mine_count) or 1)
 
 class ReactiveClientAvgEmptiesAll(ReactiveClientAvgEmpties):
+	landlocked_cell_score = lambda self: 2
+
 	def get_guess_cell(self):
 		return self.get_best_scoring_unknown(
 			self.get_all_unknown_cells,
@@ -98,7 +101,7 @@ class ReactiveClientAvgEmptiesAll(ReactiveClientAvgEmpties):
 		surr_empties = list(surr_empties)
 
 		if len(surr_empties) == 0:
-			return 2
+			return self.landlocked_cell_score()
 
 		return self.empty_ratio(cell, surr_empties)
 
@@ -109,6 +112,10 @@ class ReactiveClientAvgEmptiesAll(ReactiveClientAvgEmpties):
 				continue
 
 			yield (cell, (c for c in cell.surr_cells if c.state == EMPTY))
+
+class ReactiveClientAvgEmptiesBalanced(ReactiveClientAvgEmptiesAll):
+	def landlocked_cell_score(self):
+		return (self.server.cells_rem / self.server.mines) / 10
 
 # TODO: Test every possible mine position; gather statisitcs to find most likely
 # candidate. Obviously slow.

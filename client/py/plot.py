@@ -13,9 +13,11 @@ import progressbar # github.com/coagulant/progressbar-python3
 from guess_ais import *
 
 REPEATS_PER_CONFIG = 2000
-DIMS_LEN = 6
-NUM_DIMS = 2
+DIMS_LEN = 4
+NUM_DIMS = 3
 SEEDS_SEED = 7
+MINES_MIN = 1
+MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients
 POOL_MAX_CHUNKSIZE = 100
@@ -23,12 +25,12 @@ POOL_MAX_CHUNKSIZE = 100
 no_cores = multiprocessing.cpu_count()
 
 plot_clients = [
-	("blue", ReactiveClient),
-	("red", ReactiveClientGuess),
-	("yellow", ReactiveClientCountEmpties),
-	("cyan", ReactiveClientGuessAny),
+	#("blue", ReactiveClient),
+	#("red", ReactiveClientGuess),
+	#("cyan", ReactiveClientGuessAny),
 	("green", ReactiveClientAvgEmpties),
 	("orange", ReactiveClientAvgEmptiesAll),
+	("brown", ReactiveClientAvgEmptiesBalanced),
 	#("purple", ReactiveClientExhaustiveTest),
 	#("pink", ReactiveClientExhaustiveSplit),
 ]
@@ -50,7 +52,7 @@ def play_session(
 	client,
 	repeats_per_config = REPEATS_PER_CONFIG,
 	dim_length_range = (DIMS_LEN, DIMS_LEN + 1), # range() params
-	mine_count_range = (1, int((DIMS_LEN ** NUM_DIMS) / 2) + 1),
+	mine_count_range = (MINES_MIN, MINES_MAX + 1),
 	cell_mine_ratio_range = None, # Alternative parameter to mine count
 	num_dims_range = (NUM_DIMS, NUM_DIMS + 1),
 	seeds_seed = SEEDS_SEED
