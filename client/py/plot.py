@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.4
+import sys
 import functools
 import math
 import multiprocessing
@@ -32,10 +33,14 @@ def play_session(
 	dim_length_range = (4, 21, 4), # range() params
 	mine_count_range = (4, 21, 4),
 	cell_mine_ratio_range = None, # Alternative parameter to mine count
-	num_dims_range = (2, 3)
+	num_dims_range = (2, 3),
+	seeds_seed = None
 ):
 	configs = []
-	seeds = np.random.randint(0, 10000, repeats_per_config)
+
+	if seeds_seed is not None:
+		np.random.seed(seeds_seed)
+	seeds = np.random.randint(0, 4294967295, repeats_per_config)
 
 	# Get a list of all game parameters first
 	for num_dims in range(*num_dims_range):
@@ -187,10 +192,10 @@ if __name__ == "__main__":
 	plot_clients = {
 		"blue" : play_game_no_guess,
 		"red" : play_game_simple_guess,
-		#"yellow" : play_game_count_empties,
-		#"cyan" : play_game_guess_any,
+		"yellow" : play_game_count_empties,
+		"cyan" : play_game_guess_any,
 		"green" : play_game_avg_empties,
-		#"orange" : play_game_avg_empties_all,
+		"orange" : play_game_avg_empties_all,
 		#"purple" : play_game_exhaustive,
 		#"pink" : play_game_exhaustive_split,
 	}
@@ -211,10 +216,11 @@ if __name__ == "__main__":
 	for (colour, game_function) in plot_clients.items():
 		games = play_session(
 			game_function,
-			repeats_per_config = 4,
+			repeats_per_config = 5,
 			dim_length_range = (6, 7),
-			mine_count_range = (1, 16),
-			num_dims_range = (2, 3)
+			mine_count_range = (1, 17),
+			num_dims_range = (2, 3),
+			seeds_seed = 0
 		)
 
 		# No. mines vs % games won
@@ -229,3 +235,4 @@ if __name__ == "__main__":
 
 	# TODO: get pyplot.show() working...
 	pyplot.savefig('img.png')
+

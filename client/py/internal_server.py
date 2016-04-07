@@ -35,7 +35,7 @@ def count_empty_cells(dims, mines):
 	return functools.reduce(lambda x,y: x*y, dims) - mines
 
 class PythonInternalServer(object):
-	id = "py_internal_game"
+	id = "unknown_seed"
 	reload_id = None
 
 	# Whether the game server can be relied upon to auto-clear zero-cells.
@@ -43,6 +43,7 @@ class PythonInternalServer(object):
 
 	dims = None
 	mines = None
+	seed = None
 
 	cells_rem = None
 	game_over = False
@@ -53,14 +54,16 @@ class PythonInternalServer(object):
 	def __init__(self, dims=None, mines=None, seed=None):
 		self.dims = dims
 		self.mines = mines
+		self.seed = seed
 		self.cells_rem = count_empty_cells(dims, mines)
+		self.id = str(seed)
 
 		# Create grid
 		self.game_grid = numpy.ndarray(self.dims, dtype=int)
 		self.game_grid.fill(CLEAR)
 		self.game_grid.ravel()[:mines].fill(MINE)
 		if seed:
-			numpy.random.seed(seed)
+			numpy.random.seed(self.seed)
 		numpy.random.shuffle(self.game_grid.ravel())
 
 	def clear_cells(self, coords_list):

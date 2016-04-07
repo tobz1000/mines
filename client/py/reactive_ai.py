@@ -16,7 +16,7 @@ from internal_server import (
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 1
+VERBOSITY = 0
 
 # Ghetto enum
 MINE = -1
