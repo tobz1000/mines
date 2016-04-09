@@ -12,9 +12,9 @@ import progressbar # github.com/coagulant/progressbar-python3
 
 from guess_ais import *
 
-REPEATS_PER_CONFIG = 2000
-DIMS_LEN = 4
-NUM_DIMS = 3
+REPEATS_PER_CONFIG = 20
+DIMS_LEN = 6
+NUM_DIMS = 2
 SEEDS_SEED = 7
 MINES_MIN = 1
 MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
@@ -25,14 +25,12 @@ POOL_MAX_CHUNKSIZE = 100
 no_cores = multiprocessing.cpu_count()
 
 plot_clients = [
-	#("blue", ReactiveClient),
+	("blue", ReactiveClient),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
-	("green", ReactiveClientAvgEmpties),
-	("orange", ReactiveClientAvgEmptiesAll),
-	("brown", ReactiveClientAvgEmptiesBalanced),
-	#("purple", ReactiveClientExhaustiveTest),
-	#("pink", ReactiveClientExhaustiveSplit),
+	("orange", ReactiveClientAvgEmptiesBalanced),
+	("purple", ReactiveClientExhaustiveTest),
+	("pink", ReactiveClientExhaustiveSplit),
 ]
 
 # Chunksize for pools as calculated in multiprocessing module, but with the
@@ -84,7 +82,7 @@ def play_session(
 				for seed in seeds:
 					configs.append({
 						"client": client,
-						"dims": [dim_length] * num_dims,
+						"dims": (dim_length,) * num_dims,
 						"mines": mine_count,
 						"seed" : seed
 					})

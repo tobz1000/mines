@@ -187,7 +187,6 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 		# TODO: weight this based on nCr(inner cells, inner mines) for each
 		# num_edge_mines value.
 		for cell_set in edge_cell_sets:
-			print(len(cell_set), min(len(cell_set), mines_left))
 			for num_edge_mines in range(1, min(len(cell_set), mines_left) + 1):
 				for mine_combo in (frozenset(m) for m in itertools.combinations(
 					cell_set,
@@ -200,7 +199,8 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 		if len(edge_mine_tally) == 0:
 			return None
 
-		return min(edge_mine_tally.items(), key=lambda c: c[1])[0]
+		ret = min(edge_mine_tally.items(), key=lambda c: c[1])[0]
+		return ret
 
 class ReactiveClientExhaustiveSplit(ReactiveClientExhaustiveTest):
 	split_edge_cells = True

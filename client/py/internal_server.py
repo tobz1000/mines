@@ -51,20 +51,36 @@ class PythonInternalServer(object):
 
 	game_grid = None
 
-	def __init__(self, dims=None, mines=None, seed=None):
-		self.dims = dims
-		self.mines = mines
-		self.seed = seed
-		self.cells_rem = count_empty_cells(dims, mines)
-		self.id = str(seed)
+	# Specify "grid" (n-dimensional list of 1s and 0s) to override other options
+	# and use a pre-determined game instead of random.
+	def __init__(self, dims=None, mines=None, seed=None, grid=None):
+		if grid:
+			buffer = numpy.array(grid)
+			if buffer.dtype != int:
+				raise Exception(
+					"Supplied buffer is invalid: {}".format(buffer)
+				)
+			self.game_grid = numpy.ndarray(buffer.shape, buffer=buffer)
+			self.dims = self.game_grid.shape
+			self.mines = numpy.count_nonzero(self.game_grid)
+		else:
+			self.game_grid = self.random_grid(dims, mines, seed)
+			self.dims = dims
+			self.mines = mines
+			self.seed = seed
 
-		# Create grid
-		self.game_grid = numpy.ndarray(self.dims, dtype=int)
-		self.game_grid.fill(CLEAR)
-		self.game_grid.ravel()[:mines].fill(MINE)
+		self.cells_rem = count_empty_cells(self.dims, self.mines)
+		self.id = (self.dims, self.mines, self.seed)
+
+
+	def random_grid(self, dims, mines, seed):
+		grid = numpy.ndarray(dims, dtype=int)
+		grid.fill(CLEAR)
+		grid.ravel()[:mines].fill(MINE)
 		if seed:
 			numpy.random.seed(self.seed)
-		numpy.random.shuffle(self.game_grid.ravel())
+		numpy.random.shuffle(grid.ravel())
+		return grid
 
 	def clear_cells(self, coords_list):
 		cleared_cells = []

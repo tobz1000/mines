@@ -287,4 +287,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game([10, 10], 5, 10)
+	play_game((10, 10), 5, 10)
