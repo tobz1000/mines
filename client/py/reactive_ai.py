@@ -16,7 +16,7 @@ from internal_server import (
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 0
+VERBOSITY = 3
 
 # Ghetto enum
 MINE = -1
@@ -51,6 +51,8 @@ class GameEnd(Exception):
 		log(3, "="*50)
 
 class ReactiveClient(object):
+	# Set True for more advanced logic.
+	check_shared = False
 	game_grid = None
 	known_cells = None
 	password = "pass"
@@ -156,8 +158,50 @@ class GameGrid(dict):
 
 	def __getitem__(self, coords):
 		if not coords in self:
-			dict.__setitem__(self, coords, Cell(coords, self.parent_game))
-		return dict.__getitem__(self, coords)
+			self.__setitem__(coords, Cell(coords, self.parent_game))
+		return super().__getitem__(coords)
+
+class SharedUnknownSurrCounts(dict):
+	this_cell = None
+	def __init__(self, this_cell):
+		self.this_cell = this_cell
+
+	def __setitem__(self, other_cell, val):
+		# The exclusive surrounding cells of two shared cells can be set if
+		# we're sure one's exclusive cells must all be mines, and the other's
+		# must all be clear (with the shared cells' states still unknown).
+		for (cell1, cell2) in (
+			(self.this_cell, other_cell),
+			(other_cell, self.this_cell)
+		):
+			if (
+				cell1.unkn_surr_mine_cnt < val and
+				cell2.unkn_surr_empt_cnt < val
+			):
+				new_empties = cell1.surr_cells - cell2.surr_cells
+				new_mines = cell2.surr_cells - cell1.surr_cells
+				for cell in new_empties:
+					if cell.state == UNKNOWN:
+						cell.state = EMPTY
+				for cell in new_mines:
+					if cell.state == UNKNOWN:
+						cell.state = MINE
+				break
+		super().__setitem__(other_cell, val)
+
+	def __getitem__(self, other_cell):
+		# Get the value from the other cell if it has it. If neither has it,
+		# count how many cells are shared *total* (no UNKNOWN check), since when
+		# it's first accessed, all involved cells should be unknown.
+		if not other_cell in self:
+			if self.this_cell in other_cell.shared_unkn_surr_cnts:
+				val = other_cell.shared_unkn_surr_cnts[self.this_cell]
+			else:
+				# TODO: figure out formula based on coords values instead of
+				# compared sets, see if it's quicker
+				val = len(self.this_cell.surr_cells & other_cell.surr_cells)
+			self.__setitem__(other_cell, val)
+		return super().__getitem__(other_cell)
 
 class Cell(object):
 	def __init__(self, coords, parent_game):
@@ -168,6 +212,7 @@ class Cell(object):
 		self._surr_cells = None
 		self._unkn_surr_mine_cnt = 0
 		self._unkn_surr_empt_cnt = None
+		self.shared_unkn_surr_cnts = SharedUnknownSurrCounts(self)
 
 	def __str__(self):
 		return (
@@ -205,16 +250,25 @@ class Cell(object):
 			for cell in self.surr_cells:
 				cell.unkn_surr_empt_cnt -= 1
 
+		# Update the number of shared unknowns for each pair of surrounding
+		# cells
+		if self.parent_game.check_shared and (val == EMPTY or val == MINE):
+			for c1, c2 in itertools.combinations(
+				(c for c in self.surr_cells if c.state == EMPTY),
+				2
+			):
+				c1.shared_unkn_surr_cnts[c2] -= 1
+
 	@property
 	def surr_cells(self):
 		if self._surr_cells is None:
-			self._surr_cells = [
+			self._surr_cells = frozenset(
 				self.parent_game.game_grid[surr_coords]
 				for surr_coords in get_surrounding_coords(
 					self.coords,
 					self.parent_game.server.dims
 				)
-			]
+			)
 
 		return self._surr_cells
 
@@ -248,8 +302,7 @@ def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		played_games.append(ReactiveClient(PythonInternalServer(dims, mines)))
-		#played_games.append(ReactiveClient(JSONServerWrapper(dims, mines)))
+		played_games.append(ReactiveClient(PythonInternalServer(dims, mines, 0)))
 
 	won = 0
 	empty_cell_count = count_empty_cells(dims, mines)

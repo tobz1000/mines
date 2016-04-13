@@ -12,7 +12,7 @@ import progressbar # github.com/coagulant/progressbar-python3
 
 from guess_ais import *
 
-REPEATS_PER_CONFIG = 20
+REPEATS_PER_CONFIG = 200
 DIMS_LEN = 6
 NUM_DIMS = 2
 SEEDS_SEED = 7
@@ -28,9 +28,9 @@ plot_clients = [
 	("blue", ReactiveClient),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
-	("orange", ReactiveClientAvgEmptiesBalanced),
-	("purple", ReactiveClientExhaustiveTest),
-	("pink", ReactiveClientExhaustiveSplit),
+	#("orange", ReactiveClientAvgEmptiesBalanced),
+	#("purple", ReactiveClientExhaustiveTest),
+	#("pink", ReactiveClientExhaustiveSplit),
 ]
 
 # Chunksize for pools as calculated in multiprocessing module, but with the
