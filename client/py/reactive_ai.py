@@ -3,6 +3,8 @@ import random
 import math
 import itertools
 import time
+import inspect
+import traceback
 
 from server_json_wrapper import JSONServerWrapper
 from internal_server import (
@@ -16,7 +18,7 @@ from internal_server import (
 # 1: See results of repeated games
 # 2: See progress of single game (turns only)
 # 3: Progress of single game with start/end info
-VERBOSITY = 3
+VERBOSITY = 0
 
 # Ghetto enum
 MINE = -1
@@ -146,11 +148,16 @@ class ReactiveClient(object):
 			# This check avoids unnecessary calculations on zero-cells; can
 			# speed up some games a lot.
 			if surr_mine_count > 0 or not self.server.clears_zeroes:
+				#if cell.coords == (2, 2):
+				#	print("mines {}".format(surr_mine_count))
 				cell.unkn_surr_mine_cnt += surr_mine_count
 				cell.unkn_surr_empt_cnt -= surr_mine_count
 
 	def get_guess_cell(self):
 		pass
+
+class ReactiveClientCheckShared(ReactiveClient):
+	check_shared = True
 
 class GameGrid(dict):
 	def __init__(self, parent_game):
@@ -162,7 +169,6 @@ class GameGrid(dict):
 		return super().__getitem__(coords)
 
 class SharedUnknownSurrCounts(dict):
-	this_cell = None
 	def __init__(self, this_cell):
 		self.this_cell = this_cell
 
@@ -182,7 +188,7 @@ class SharedUnknownSurrCounts(dict):
 				new_mines = cell2.surr_cells - cell1.surr_cells
 				for cell in new_empties:
 					if cell.state == UNKNOWN:
-						cell.state = EMPTY
+						cell.state = TO_CLEAR
 				for cell in new_mines:
 					if cell.state == UNKNOWN:
 						cell.state = MINE
@@ -232,6 +238,9 @@ class Cell(object):
 
 	@state.setter
 	def state(self, val):
+		if val == self._state:
+			return
+
 		known_cells = self.parent_game.known_cells
 
 		if self._state in known_cells and self in known_cells[self._state]:
@@ -302,7 +311,9 @@ def play_game(dims, mines, repeats=1):
 	played_games = []
 
 	for i in range(repeats):
-		played_games.append(ReactiveClient(PythonInternalServer(dims, mines, 0)))
+		played_games.append(ReactiveClientCheckShared(
+			PythonInternalServer(dims, mines)
+		))
 
 	won = 0
 	empty_cell_count = count_empty_cells(dims, mines)
@@ -340,4 +351,4 @@ def play_game(dims, mines, repeats=1):
 	)
 
 if __name__ == '__main__':
-	play_game((10, 10), 5, 10)
+	play_game((6, 6), 2, 100)

@@ -77,7 +77,7 @@ class PythonInternalServer(object):
 		grid = numpy.ndarray(dims, dtype=int)
 		grid.fill(CLEAR)
 		grid.ravel()[:mines].fill(MINE)
-		if seed:
+		if seed is not None:
 			numpy.random.seed(self.seed)
 		numpy.random.shuffle(grid.ravel())
 		return grid

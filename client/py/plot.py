@@ -1,8 +1,15 @@
 #!/usr/bin/env python3.4
+USE_MULTIPROCESS = False
+
 import sys
 import functools
 import math
-import multiprocessing
+# TODO: sometimes errors using multiprocess due to crappy pickling. Disable
+# in this case.
+if USE_MULTIPROCESS:
+	import multiprocess as multiprocessing
+else:
+	import multiprocessing.dummy as multiprocessing
 import statistics
 import scipy
 import statsmodels.api as sm
@@ -12,7 +19,7 @@ import progressbar # github.com/coagulant/progressbar-python3
 
 from guess_ais import *
 
-REPEATS_PER_CONFIG = 200
+REPEATS_PER_CONFIG = 60
 DIMS_LEN = 6
 NUM_DIMS = 2
 SEEDS_SEED = 7
@@ -20,12 +27,16 @@ MINES_MIN = 1
 MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients
-POOL_MAX_CHUNKSIZE = 100
+POOL_MAX_CHUNKSIZE = 10
 
-no_cores = multiprocessing.cpu_count()
+if hasattr(multiprocessing, "cpu_count"):
+	no_cores = multiprocessing.cpu_count()
+else:
+	no_cores = 1
 
 plot_clients = [
 	("blue", ReactiveClient),
+	#("green", ReactiveClie.ntCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
 	#("orange", ReactiveClientAvgEmptiesBalanced),
@@ -146,7 +157,7 @@ if __name__ == "__main__":
 
 	# Option to assume games with zero mines would always be won, to save time
 	# actually playing them.
-	def plot(instances, x_fn, y_fn, label, colour, add_zero_mine=True):
+	def plot(instances, x_fn, y_fn, label, colour, add_zero_mine=False):
 		if len(instances) < 1:
 			raise Exception("No game instances to plot")
 		instances = sorted(instances, key=x_fn)
