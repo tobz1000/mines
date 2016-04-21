@@ -57,7 +57,8 @@ const displayGame = (gameData, pass) => {
 		gameData.id,
 		gameData.dims,
 		gameData.mines,
-		pass
+		pass,
+		true
 	);
 }
 
@@ -84,7 +85,7 @@ const action = (req, respFn) => {
 };
 
 /* Optional 'pass' param if game is controllable */
-const ClientGame = function(id, dims, mines, pass) {
+const ClientGame = function(id, dims, mines, pass, debug) {
 	const cellState = {
 		UNKNOWN : "u",
 		FLAGGED : "f"
@@ -167,13 +168,13 @@ const ClientGame = function(id, dims, mines, pass) {
 	between two cells. Probably use border-collapse on the table, then some
 	other CSS to retain the white edges on cells. Or just use fancy fading. */
 	const hoverSurrounding = (coords, hoverOn) => {
-		let surrCoords = surroundingUnknownCoords(coords);
-		for(const coords of surrCoords)
-			$getCell(coords).toggleClass("cellHover", hoverOn);
+		for(const c of surroundingUnknownCoords(coords)){
+			$getCell(c).toggleClass("cellHover", hoverOn);
+		}
 	}
 
 	const clearSurrounding = (coords) => {
-		let surrCoords = surroundingUnknownCoords(coords);
+		const surrCoords = surroundingUnknownCoords(coords);
 		if(surrCoords.length > 0)
 			clearCells(surrCoords);
 
@@ -194,8 +195,15 @@ const ClientGame = function(id, dims, mines, pass) {
 		return pass && !gameOver && currentTurn === latestTurn;
 	}
 
+	/* Show the debug info passed from the client on this specific turn. */
+	const showClientDebug = (coords, show) => {
+		$("#debugArea").html(show ? coords.join() : "");
+	}
+
 	const GameCell = function(coords) {
-		this.$elm = $("<td>").addClass("cell laminate");
+		this.$elm = $("<td>")
+			.attr('id', cellId(coords))
+			.addClass("cell laminate");
 		/* Change state of one cell; perform internal data & GUI changes */
 		this.changeState = (newStateName, surrCount) => {
 			const states = {
@@ -261,6 +269,15 @@ const ClientGame = function(id, dims, mines, pass) {
 				}
 			}
 
+			if(debug) {
+				this.$elm.on('mouseover', () => {
+					showClientDebug(coords, true);
+				});
+				this.$elm.on('mouseout', () => {
+					showClientDebug(coords, false);
+				});
+			};
+
 			/* TODO: this is meant to highlight surrounding cells right after
 			clicking an unknown cell. Doesn't work (:hover is false); don't know
 			why. */
@@ -302,6 +319,7 @@ const ClientGame = function(id, dims, mines, pass) {
 	}
 
 	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
+	$gameArea.append($("<div>").attr("id", "debugArea"));
 
 	this.close = () => {
 		$gameArea.empty();

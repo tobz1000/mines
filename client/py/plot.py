@@ -18,16 +18,20 @@ import matplotlib.pyplot as pyplot
 import progressbar # github.com/coagulant/progressbar-python3
 
 from guess_ais import *
+from server_json_wrapper import JSONServerWrapper
 
-REPEATS_PER_CONFIG = 60
+REPEATS_PER_CONFIG = 3
 DIMS_LEN = 6
 NUM_DIMS = 2
 SEEDS_SEED = 7
-MINES_MIN = 1
-MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
+MINES_MIN = 5
+MINES_MAX = 5
+#MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients
 POOL_MAX_CHUNKSIZE = 10
+
+SERVER = JSONServerWrapper
 
 if hasattr(multiprocessing, "cpu_count"):
 	no_cores = multiprocessing.cpu_count()
@@ -35,8 +39,8 @@ else:
 	no_cores = 1
 
 plot_clients = [
-	("blue", ReactiveClient),
-	#("green", ReactiveClie.ntCheckShared),
+	#("blue", ReactiveClient),
+	("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
 	#("orange", ReactiveClientAvgEmptiesBalanced),
@@ -147,7 +151,7 @@ if __name__ == "__main__":
 	# pickle library used by multiprocessing.
 	def play_game(config):
 		return config["client"](
-			PythonInternalServer(
+			SERVER(
 				config["dims"],
 				config["mines"],
 				config["seed"]
