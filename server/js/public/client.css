@@ -10,6 +10,11 @@ input[type=number] {
 	display: flex;
 }
 
+#debugArea {
+	padding: 10px;
+	display: flex;
+}
+
 /* No highlighting of cursor-changing */
 .laminate {
 	cursor: default;

@@ -97,6 +97,8 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	const gameGrid = [];
 	/* List of lists of cellDatas, to represent each turn in the game. */
 	const gameTurns = [];
+	/* Debug info (which isn't specific to a cell) for each turn */
+	const debugInfo = []
 	let currentTurn = 0;
 	let latestTurn = 0;
 	let gameOver = false;
@@ -143,44 +145,6 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		});
 	};
 
-	/* Get surrounding co-ordinates that aren't cleared or flagged. */
-	const surroundingUnknownCoords = coords => {
-		let ret = [];
-		for (let i of [-1, 0, 1])
-			for (let j of [-1, 0, 1]) {
-				if(i === 0 && j == 0)
-					continue;
-
-				let x = coords[0] + i, y = coords[1] + j;
-
-				if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
-					continue;
-
-				if(gameGrid[x][y].state !== cellState.UNKNOWN)
-					continue;
-
-				ret.push([x, y]);
-			}
-		return ret;
-	};
-
-	/* TODO: figure out a nice way to stop the flashing when the cursor moves
-	between two cells. Probably use border-collapse on the table, then some
-	other CSS to retain the white edges on cells. Or just use fancy fading. */
-	const hoverSurrounding = (coords, hoverOn) => {
-		for(const c of surroundingUnknownCoords(coords)){
-			$getCell(c).toggleClass("cellHover", hoverOn);
-		}
-	}
-
-	const clearSurrounding = (coords) => {
-		const surrCoords = surroundingUnknownCoords(coords);
-		if(surrCoords.length > 0)
-			clearCells(surrCoords);
-
-		hoverSurrounding(coords, false);
-	}
-
 	const cellId = coords => {
 		return `cell-${coords[0]}-${coords[1]}`;
 	}
@@ -195,15 +159,54 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		return pass && !gameOver && currentTurn === latestTurn;
 	}
 
-	/* Show the debug info passed from the client on this specific turn. */
-	const showClientDebug = (coords, show) => {
-		$("#debugArea").html(show ? coords.join() : "");
-	}
-
 	const GameCell = function(coords) {
+		let _surroundingUnknownCoords;
+
+		/* Get surrounding co-ordinates that aren't cleared or flagged. */
+		const surroundingUnknownCoords = () => {
+			if(!_surroundingUnknownCoords) {
+				_surroundingUnknownCoords = [];
+				for (let i of [-1, 0, 1])
+					for (let j of [-1, 0, 1]) {
+						if(i === 0 && j === 0)
+							continue;
+
+						let x = coords[0] + i, y = coords[1] + j;
+
+						if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
+							continue;
+
+						if(gameGrid[x][y].state !== cellState.UNKNOWN)
+							continue;
+
+						_surroundingUnknownCoords.push([x, y]);
+					}
+			}
+			return _surroundingUnknownCoords;
+		};
+
+		/* TODO: figure out a nice way to stop the flashing when the cursor
+		moves between two cells. Probably use border-collapse on the table, then
+		some other CSS to retain the white edges on cells. Or just use fancy
+		fading. */
+		const hoverSurrounding = hoverOn => {
+			for(const c of surroundingUnknownCoords()){
+				$getCell(c).toggleClass("cellHover", hoverOn);
+			}
+		}
+
+		const clearSurrounding = () => {
+			const surrCoords = surroundingUnknownCoords();
+			if(surrCoords.length > 0)
+				clearCells(surrCoords);
+
+			hoverSurrounding(false);
+		}
+
 		this.$elm = $("<td>")
 			.attr('id', cellId(coords))
 			.addClass("cell laminate");
+
 		/* Change state of one cell; perform internal data & GUI changes */
 		this.changeState = (newStateName, surrCount) => {
 			const states = {
@@ -228,11 +231,11 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 					class : 'cellCleared',
 					text : surrCount > 0 ? surrCount : undefined,
 					click : surrCount > 0 ?
-						() => { clearSurrounding(coords); } : undefined,
+						() => { clearSurrounding(); } : undefined,
 					mouseover : surrCount > 0 ?
-						() => { hoverSurrounding(coords, true); } : undefined,
+						() => { hoverSurrounding(true); } : undefined,
 					mouseout : surrCount > 0 ?
-						() => { hoverSurrounding(coords, false); } : undefined
+						() => { hoverSurrounding(false); } : undefined
 				}
 			};
 
@@ -269,14 +272,19 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 				}
 			}
 
-			if(debug) {
+			if(debug)
 				this.$elm.on('mouseover', () => {
-					showClientDebug(coords, true);
+					/* Show the debug info passed from the client on this
+					specific turn. */
+					/* TODO: what is this C null-checking crap */
+					if(
+						debugInfo[currentTurn] &&
+						debugInfo[currentTurn].cellInfo
+					)
+						$("#debugAreaCell").html(
+							debugInfo[currentTurn].cellInfo[coords]
+						);
 				});
-				this.$elm.on('mouseout', () => {
-					showClientDebug(coords, false);
-				});
-			};
 
 			/* TODO: this is meant to highlight surrounding cells right after
 			clicking an unknown cell. Doesn't work (:hover is false); don't know
@@ -305,6 +313,13 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		}
 	});
 
+	debug && serverWatcher.addEventListener('debug', (resp) => {
+		const turnNumber = Number(resp.lastEventId);
+		const data = JSON.parse(resp.data);
+
+		debugInfo[turnNumber] = data;
+	});
+
 	let $gameTable = $("<table>");
 
 	for(let i = 0; i < dims[0]; i++) {
@@ -319,7 +334,11 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	}
 
 	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
-	$gameArea.append($("<div>").attr("id", "debugArea"));
+	$gameArea.append(
+		$("<div>").attr("id", "debugArea").append(
+			$("<div>").attr("id", "debugAreaCell")
+		)
+	);
 
 	this.close = () => {
 		$gameArea.empty();

@@ -243,8 +243,16 @@ const performAction = req => {
 
 	const gameState = game.gameState({ showLastCells: true });
 
-	if(args.gamedb)
+	/* Pass on any debug info supplied */
+	if(args.gamedb) {
 		game.broadcaster.send(gameState);
+		game.broadcaster.send(
+			JSON.stringify(
+				typeof(req.debug) !== "undefined" ? req.debug : null
+			),
+			'debug'
+		);
+	}
 
 	return gameState;
 }
