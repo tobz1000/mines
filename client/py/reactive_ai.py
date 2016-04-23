@@ -96,6 +96,15 @@ class ReactiveClient(object):
 	def all_coords(self):
 		return itertools.product(*(range(c) for c in self.server.dims))
 
+	def game_grid_debug(self):
+		ret = {}
+		for coords, cell in self.game_grid.items():
+			# Key matches js-style toString for coords
+			ret[",".join(str(c) for c in coords)] = {
+				"state" : cell._state
+			}
+		return ret
+
 	def play(self, first_coords):
 		self.start_time = time.time()
 		if first_coords == None:
@@ -126,7 +135,13 @@ class ReactiveClient(object):
 		self.turns_hash_sum += hash(coords_list)
 
 		wait_start = time.time()
-		new_cells = self.server.clear_cells(coords_list)
+		new_cells = self.server.clear_cells(
+			coords_list,
+			{
+				"gameInfo" : "game info here",
+				"cellInfo" : self.game_grid_debug()
+			}
+		)
 		self.wait_time += time.time() - wait_start
 
 		log(2, "->{} ".format(len(new_cells)), end='', flush=True)

@@ -21,7 +21,7 @@ from guess_ais import *
 from server_json_wrapper import JSONServerWrapper
 
 REPEATS_PER_CONFIG = 3
-DIMS_LEN = 6
+DIMS_LEN = 8
 NUM_DIMS = 2
 SEEDS_SEED = 7
 MINES_MIN = 5
@@ -39,8 +39,8 @@ else:
 	no_cores = 1
 
 plot_clients = [
-	#("blue", ReactiveClient),
-	("green", ReactiveClientCheckShared),
+	("blue", ReactiveClient),
+	#("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
 	#("orange", ReactiveClientAvgEmptiesBalanced),

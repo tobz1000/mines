@@ -243,15 +243,15 @@ const performAction = req => {
 
 	const gameState = game.gameState({ showLastCells: true });
 
-	/* Pass on any debug info supplied */
 	if(args.gamedb) {
+		/* Pass on any debug info supplied (should be relevant to previous turn)
+		*/
+		if(typeof(req.debug) !== "undefined") {
+			const data = { turn: gameState.turn - 1, debug : req.debug };
+			game.broadcaster.send(data, 'debug');
+		}
+		/* Then send result of current turn */
 		game.broadcaster.send(gameState);
-		game.broadcaster.send(
-			JSON.stringify(
-				typeof(req.debug) !== "undefined" ? req.debug : null
-			),
-			'debug'
-		);
 	}
 
 	return gameState;
@@ -281,6 +281,7 @@ const Game = function(id, pass, dims, mines, gridArray) {
 	let cellsRem = size - mines;
 	/* Information about the last cell(s) cleared */
 	let lastUserCells = [];
+	let turnCount = 0;
 
 	gridArray = gridArray || _.shuffle(new Array(size)
 		.fill(cellState.MINE, 0, mines)
@@ -367,7 +368,8 @@ const Game = function(id, pass, dims, mines, gridArray) {
 			win : win,
 			dims : dims,
 			mines : mines,
-			cellsRem : cellsRem
+			cellsRem : cellsRem,
+			turn : turnCount
 		};
 
 		/* Clear lastUserCells after sending. */
@@ -387,6 +389,8 @@ const Game = function(id, pass, dims, mines, gridArray) {
 	this.clearCells = coordsArr => {
 		if(gameOver)
 			throw new MinesError("Game over!");
+
+		turnCount++;
 
 		let coords;
 		while(coords = coordsArr.pop()) {

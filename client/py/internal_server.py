@@ -82,7 +82,7 @@ class PythonInternalServer(object):
 		numpy.random.shuffle(grid.ravel())
 		return grid
 
-	def clear_cells(self, coords_list):
+	def clear_cells(self, coords_list, debug=None):
 		cleared_cells = []
 		for coords in coords_list:
 			if self.game_grid[coords] == MINE:

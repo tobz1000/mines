@@ -62,6 +62,23 @@ const displayGame = (gameData, pass) => {
 	);
 }
 
+/* Display JSON data in the specified page element. Content is passed in a
+wrapper function to allow for error handling. */
+const displayDebug = ($elm, contentGetter) => {
+	let debugText;
+
+	try {
+		debugText = JSON.stringify(contentGetter())
+	/* If debug for a specific cell/turn doesn't exist, ignore. */
+	} catch (e) {
+		if(!(e instanceof TypeError))
+			throw e;
+	}
+	debugText = debugText || "";
+	console.log(debugText);
+	$elm.html(debugText);
+}
+
 const showMsg = msg => {
 	$("#gameInfo").text(msg).show()
 }
@@ -96,9 +113,9 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	/* Representation of game state; each cell is a 'GameCell'. */
 	const gameGrid = [];
 	/* List of lists of cellDatas, to represent each turn in the game. */
-	const gameTurns = [];
-	/* Debug info (which isn't specific to a cell) for each turn */
-	const debugInfo = []
+	const gameTurns = {};
+	/* Debug info for each turn */
+	const debugInfo = {};
 	let currentTurn = 0;
 	let latestTurn = 0;
 	let gameOver = false;
@@ -128,8 +145,13 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 			}
 		}
 
-		$gameArea.prepend($gameTable);
 		currentTurn = newTurnNumber;
+
+		$gameArea.prepend($gameTable);
+
+		displayDebug(
+			$("#debugAreaTurn"), () => debugInfo[currentTurn].gameInfo
+		);
 	}
 
 	/* Perform a turn: send request to server */
@@ -160,29 +182,25 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	}
 
 	const GameCell = function(coords) {
-		let _surroundingUnknownCoords;
-
 		/* Get surrounding co-ordinates that aren't cleared or flagged. */
 		const surroundingUnknownCoords = () => {
-			if(!_surroundingUnknownCoords) {
-				_surroundingUnknownCoords = [];
-				for (let i of [-1, 0, 1])
-					for (let j of [-1, 0, 1]) {
-						if(i === 0 && j === 0)
-							continue;
+			const ret = [];
+			for (let i of [-1, 0, 1])
+				for (let j of [-1, 0, 1]) {
+					if(i === 0 && j === 0)
+						continue;
 
-						let x = coords[0] + i, y = coords[1] + j;
+					let x = coords[0] + i, y = coords[1] + j;
 
-						if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
-							continue;
+					if(x < 0 || y < 0 || x > dims[0] - 1 || y > dims[1] - 1)
+						continue;
 
-						if(gameGrid[x][y].state !== cellState.UNKNOWN)
-							continue;
+					if(gameGrid[x][y].state !== cellState.UNKNOWN)
+						continue;
 
-						_surroundingUnknownCoords.push([x, y]);
-					}
-			}
-			return _surroundingUnknownCoords;
+					ret.push([x, y]);
+				}
+			return ret;
 		};
 
 		/* TODO: figure out a nice way to stop the flashing when the cursor
@@ -274,16 +292,10 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 
 			if(debug)
 				this.$elm.on('mouseover', () => {
-					/* Show the debug info passed from the client on this
-					specific turn. */
-					/* TODO: what is this C null-checking crap */
-					if(
-						debugInfo[currentTurn] &&
-						debugInfo[currentTurn].cellInfo
+					displayDebug(
+						$("#debugAreaCell"),
+						() => debugInfo[currentTurn].cellInfo[coords.toString()]
 					)
-						$("#debugAreaCell").html(
-							debugInfo[currentTurn].cellInfo[coords]
-						);
 				});
 
 			/* TODO: this is meant to highlight surrounding cells right after
@@ -300,8 +312,8 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		throw new Error("Only 2d games supported!");
 
 	serverWatcher.addEventListener('message', (resp) => {
-		const turnNumber = Number(resp.lastEventId);
 		const data = JSON.parse(resp.data);
+		const turnNumber = data.turn;
 
 		newTurn(data.newCellData, turnNumber);
 		displayTurn(turnNumber);
@@ -314,10 +326,8 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	});
 
 	debug && serverWatcher.addEventListener('debug', (resp) => {
-		const turnNumber = Number(resp.lastEventId);
 		const data = JSON.parse(resp.data);
-
-		debugInfo[turnNumber] = data;
+		debugInfo[data.turn] = data.debug;
 	});
 
 	let $gameTable = $("<table>");
@@ -336,6 +346,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	$gameArea.append($("<ol>").attr("id", "turnList").addClass("laminate"));
 	$gameArea.append(
 		$("<div>").attr("id", "debugArea").append(
+			$("<div>").attr("id", "debugAreaTurn"),
 			$("<div>").attr("id", "debugAreaCell")
 		)
 	);
