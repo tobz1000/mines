@@ -3,6 +3,9 @@
 # npm files
 node_modules
 
+# bower files
+bower_components
+
 # pyvenv files
 __pycache__
 .Python
