@@ -96,14 +96,37 @@ class ReactiveClient(object):
 	def all_coords(self):
 		return itertools.product(*(range(c) for c in self.server.dims))
 
-	def game_grid_debug(self):
-		ret = {}
+	# Debug information about each cell. Read private vars to avoid triggering
+	# any prop-getting behaviour.
+	def game_cells_debug(self):
+		info = {}
+
 		for coords, cell in self.game_grid.items():
-			# Key matches js-style toString for coords
-			ret[",".join(str(c) for c in coords)] = {
-				"state" : cell._state
+			# Add some private primitives
+			cell_info = {
+				attr : getattr(cell, attr) for attr in [
+					"coords",
+					"_state",
+					"_unkn_surr_mine_cnt",
+					"_unkn_surr_empt_cnt"
+				]
 			}
-		return ret
+
+			# Represent adjacent cells by their coords
+			cell_info["_surr_cells"] = None if cell._surr_cells is None else [
+				adj_cell.coords for adj_cell in cell._surr_cells
+			]
+
+			cell_info["shared_unkn_surr_cnts"] = {
+				adj_cell.coords : count
+				for adj_cell, count in cell.shared_unkn_surr_cnts.items()
+			}
+
+			# Can't use tuple as JSON key; this matches js-style toString for
+			# a coords array
+			info[",".join(str(c) for c in coords)] = cell_info
+
+		return info
 
 	def play(self, first_coords):
 		self.start_time = time.time()
@@ -139,7 +162,7 @@ class ReactiveClient(object):
 			coords_list,
 			{
 				"gameInfo" : "game info here",
-				"cellInfo" : self.game_grid_debug()
+				"cellInfo" : self.game_cells_debug()
 			}
 		)
 		self.wait_time += time.time() - wait_start

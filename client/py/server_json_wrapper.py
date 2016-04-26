@@ -4,6 +4,13 @@ import requests
 
 SERVER_ADDR = "http://localhost:1066"
 
+# Allow for dumping of more data types
+class Encoder(json.JSONEncoder):
+	def default(self, obj):
+		if isinstance(obj, set) or isinstance(obj, frozenset):
+			return list(obj)
+		return super().default(obj)
+
 class JSONServerWrapper(object):
 	id = None
 	password = "pass"
@@ -55,7 +62,7 @@ class JSONServerWrapper(object):
 		# response/no server response
 		resp = json.loads(requests.post(
 			SERVER_ADDR + "/action",
-			data=json.dumps(params)
+			data=json.dumps(params, cls=Encoder)
 		).text)
 
 		if "error" in resp:
