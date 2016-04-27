@@ -39,8 +39,8 @@ else:
 	no_cores = 1
 
 plot_clients = [
-	("blue", ReactiveClient),
-	#("green", ReactiveClientCheckShared),
+	#("blue", ReactiveClient),
+	("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
 	#("orange", ReactiveClientAvgEmptiesBalanced),

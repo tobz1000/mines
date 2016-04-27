@@ -101,6 +101,11 @@ class ReactiveClient(object):
 	def game_cells_debug(self):
 		info = {}
 
+		# Can't use tuple as JSON key; this matches js-style toString for a
+		# coords array
+		def coords_json_key(coords):
+			return ",".join(str(c) for c in coords)
+
 		for coords, cell in self.game_grid.items():
 			# Add some private primitives
 			cell_info = {
@@ -118,13 +123,13 @@ class ReactiveClient(object):
 			]
 
 			cell_info["shared_unkn_surr_cnts"] = {
-				adj_cell.coords : count
+				coords_json_key(adj_cell.coords) : count
 				for adj_cell, count in cell.shared_unkn_surr_cnts.items()
 			}
 
 			# Can't use tuple as JSON key; this matches js-style toString for
 			# a coords array
-			info[",".join(str(c) for c in coords)] = cell_info
+			info[coords_json_key(coords)] = cell_info
 
 		return info
 
