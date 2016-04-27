@@ -65,18 +65,21 @@ const displayGame = (gameData, pass) => {
 /* Display JSON data in the specified page element. Content is passed in a
 wrapper function to allow for error handling. */
 const displayDebug = ($elm, contentGetter) => {
-	let debugText;
+	let debugObj, contents;
 
 	try {
-		debugText = JSON.stringify(contentGetter())
+		debugObj = contentGetter();
 	/* If debug for a specific cell/turn doesn't exist, ignore. */
 	} catch (e) {
 		if(!(e instanceof TypeError))
 			throw e;
 	}
-	debugText = debugText || "";
-	console.log(debugText);
-	$elm.html(debugText);
+	if(typeof debugObj !== "undefined")
+		contents = new JSONFormatter(debugObj, 1, {hoverPreviewEnabled: true})
+			.render();
+	else
+		contents = "";
+	$elm.html(contents);
 }
 
 const showMsg = msg => {
@@ -290,13 +293,14 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 				}
 			}
 
-			if(debug)
-				this.$elm.on('mouseover', () => {
+			if(debug) {
+				this.$elm.on('click', () => {
 					displayDebug(
 						$("#debugAreaCell"),
 						() => debugInfo[currentTurn].cellInfo[coords.toString()]
 					)
 				});
+			}
 
 			/* TODO: this is meant to highlight surrounding cells right after
 			clicking an unknown cell. Doesn't work (:hover is false); don't know
