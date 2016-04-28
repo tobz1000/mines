@@ -22,7 +22,7 @@ const refreshGameList = resp => {
 
 	for(const g of JSON.parse(resp.data)) {
 		/* TODO: race condition for display of "watchable"/"playable", if the
-		response from newGame() comes is received after the gameLister entry. */
+		response from newGame() is received after the gameLister entry. */
 		const label = `${g.id} (${g.dims[0]}x${g.dims[1]}, ${g.mines}, ` +
 				`${gamePasses[g.id] ? "playable" : "watchable"})`;
 		$gameList.append($("<li>")
@@ -122,12 +122,23 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	const toClearCoords = {};
 	/* Debug info for each turn */
 	const debugInfo = {};
-	let currentTurn = 0;
-	let latestTurn = 0;
+	let currentTurn = -1;
+	let latestTurn;
 	let gameOver = false;
 
+	action(
+		{ action: 'status', id: id },
+		resp => {
+			latestTurn = resp.turn;
+			displayTurn(latestTurn);
+		}
+	)
+
 	const displayTurn = newTurnNumber => {
-		if(newTurnNumber === currentTurn)
+		/* When loading a new game, don't render anything until data for the
+		latest turn has been loaded (and the number of the latest turn is
+		retrieved). */
+		if(latestTurn === undefined || !gameTurns[latestTurn])
 			return;
 
 		$gameTable.detach();
@@ -136,7 +147,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		const end = reverse ? currentTurn : newTurnNumber;
 
 		/* Reset any highlighted "to clear" cells if going backwards. */
-		if(toClearCoords[currentTurn]) {
+		if(reverse && toClearCoords[currentTurn]) {
 			for (let coords of toClearCoords[currentTurn])
 				getCell(coords).changeState('unknown');
 		}
@@ -255,7 +266,10 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 				unknown : {
 					cellState : cellState.UNKNOWN,
 					class : 'cellUnknown',
-					click : () => { clearCells([coords]); },
+					click : () => {
+						this.$elm.removeClass('cellHover');
+						clearCells([coords]);
+					},
 					contextmenu : () => { this.changeState('flagged'); },
 					mouseover : () => { this.$elm.addClass('cellHover'); },
 					mouseout : () => { this.$elm.removeClass('cellHover'); }
@@ -264,8 +278,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 					cellState : surrCount,
 					class : 'cellCleared',
 					text : surrCount > 0 ? surrCount : undefined,
-					click : surrCount > 0 ?
-						() => { clearSurrounding(); } : undefined,
+					click : surrCount > 0 ? clearSurrounding : undefined,
 					mouseover : surrCount > 0 ?
 						() => { hoverSurrounding(true); } : undefined,
 					mouseout : surrCount > 0 ?
@@ -335,13 +348,20 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		/* Add turn new data from server to list & GUI */
 		gameTurns[turnNumber] = data.newCellData;
 		$("#turnList").append($("<li>")
-			.click(() => { displayTurn(turnNumber); })
+			.click(() => {
+				if(currentTurn !== turnNumber)
+					displayTurn(turnNumber);
+			})
 			.text("Turn")
 			.attr("value", turnNumber)
 		);
 
+		/* Wait for initial latestTurn value from server before attempting to
+		update it */
+		if(latestTurn !== undefined)
+			latestTurn = Math.max(latestTurn, turnNumber);
+
 		displayTurn(turnNumber);
-		latestTurn = turnNumber;
 
 		if(data.gameOver) {
 			gameOver = true;

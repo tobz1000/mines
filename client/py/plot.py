@@ -21,11 +21,11 @@ from guess_ais import *
 from server_json_wrapper import JSONServerWrapper
 
 REPEATS_PER_CONFIG = 1
-DIMS_LEN = 20
+DIMS_LEN = 30
 NUM_DIMS = 2
 SEEDS_SEED = 7
-MINES_MIN = 80
-MINES_MAX = 80
+MINES_MIN = 100
+MINES_MAX = 100
 #MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients

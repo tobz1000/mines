@@ -175,7 +175,8 @@ const performAction = req => {
 					req.dims,
 					req.mines
 				);
-			}
+			},
+			promptBroadcast : true
 		},
 
 		clearCells : {
@@ -192,8 +193,16 @@ const performAction = req => {
 				if(game.pass !== req.pass)
 					throw new MinesError("Incorrect password!");
 				game.clearCells(req.coords);
-			}
+			},
+			promptBroadcast : true
 		},
+
+		status : {
+			paramChecks : ty.obj.with({
+				id : ty.str.ne
+			}),
+			func : () => { game = getGame(req.id); }
+		}
 	};
 
 	if(args.gamedb){
@@ -242,11 +251,12 @@ const performAction = req => {
 		}
 		else throw e;
 	}
+
 	gameAction.func();
 
 	const gameState = game.gameState({ showLastCells: true });
 
-	if(args.gamedb) {
+	if(args.gamedb && gameAction.promptBroadcast) {
 		/* Pass on any debug info supplied (should be relevant to previous turn)
 		*/
 		if(gameState.turn > 0) {
