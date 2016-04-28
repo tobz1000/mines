@@ -1,15 +1,25 @@
 #!/usr/bin/env python3.4
 import json
 import requests
+import enum
 
 SERVER_ADDR = "http://localhost:1066"
 
 # Allow for dumping of more data types
 class Encoder(json.JSONEncoder):
 	def default(self, obj):
-		if isinstance(obj, set) or isinstance(obj, frozenset):
-			return list(obj)
-		return super().default(obj)
+		transforms = {
+			set			: list,
+			frozenset	: list
+		}
+
+		if type(obj) in transforms:
+			return transforms[type(obj)](obj)
+
+		try:
+			return super().default(obj)
+		except TypeError as e:
+			return str(obj)
 
 class JSONServerWrapper(object):
 	id = None

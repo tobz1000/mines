@@ -20,14 +20,14 @@ const argsList = clArgs([
 	{
 		name: 'help',
 		alias: 'h',
-		description: 'Display available command line arguments',
+		description: 'Display available command line arguments.',
 		type: Boolean
 	},
 	{ // TODO: consolidate/organise the code activated by this.
 		name: 'gamedb',
 		alias: 'd',
 		description:
-			'Save played games to a database, to be replayed or watched.' +
+			'Save played games to a database, to be replayed or watched. ' +
 			'Seems to increase server delay ~25%.',
 		type: Boolean
 	}
@@ -131,7 +131,7 @@ const db = {
 /* Performs the action requested by a player. Returns the gameState, and
 broadcasts it. */
 const performAction = req => {
-	let actionName, gameAction, game;
+	let actionName, gameAction, game, coordsToClear;
 
 	const newGameId = () => {
 		let id;
@@ -185,6 +185,9 @@ const performAction = req => {
 				coords : TY_COORDS_LIST
 			}),
 			func : () => {
+				/* Record what the client actually requested to clear (without
+				auto-cleared zeroes) for game viewing/debug purposes */
+				coordsToClear = req.coords;
 				game = getGame(req.id);
 				if(game.pass !== req.pass)
 					throw new MinesError("Incorrect password!");
@@ -246,10 +249,15 @@ const performAction = req => {
 	if(args.gamedb) {
 		/* Pass on any debug info supplied (should be relevant to previous turn)
 		*/
-		if(typeof(req.debug) !== "undefined") {
-			const data = { turn: gameState.turn - 1, debug : req.debug };
-			game.broadcaster.send(data, 'debug');
+		if(gameState.turn > 0) {
+			const debugData = {
+				turn: gameState.turn - 1,
+				toClear: coordsToClear,
+				debug: req.debug
+			};
+			game.broadcaster.send(debugData, 'debug');
 		}
+
 		/* Then send result of current turn */
 		game.broadcaster.send(gameState);
 	}
@@ -321,7 +329,6 @@ const Game = function(id, pass, dims, mines, gridArray) {
 			return surrCount;
 		}
 
-		// this.getState = () => { return gameGrid.get(coords[0], coords[1]); };
 		this.getState = () => { return gameGrid.get(...coords); };
 
 		this.uncover = () => {
@@ -389,6 +396,9 @@ const Game = function(id, pass, dims, mines, gridArray) {
 	this.clearCells = coordsArr => {
 		if(gameOver)
 			throw new MinesError("Game over!");
+
+		/* Method is destructive, so copy array first */
+		coordsArr = coordsArr.slice();
 
 		turnCount++;
 

@@ -117,44 +117,58 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	const gameGrid = [];
 	/* List of lists of cellDatas, to represent each turn in the game. */
 	const gameTurns = {};
+	/* Retroactive list of cells the client intended to clear next, for each
+	previous turn in the game. */
+	const toClearCoords = {};
 	/* Debug info for each turn */
 	const debugInfo = {};
 	let currentTurn = 0;
 	let latestTurn = 0;
 	let gameOver = false;
 
-	/* Add turn new data from server to list & GUI */
-	const newTurn = (data, count) => {
-		gameTurns[count] = data;
-		$("#turnList").append($("<li>")
-			.click(() => { displayTurn(count); })
-			.text("Turn")
-			.attr("value", count)
-		);
-	}
-
 	const displayTurn = newTurnNumber => {
+		if(newTurnNumber === currentTurn)
+			return;
+
 		$gameTable.detach();
 		const reverse = newTurnNumber < currentTurn;
 		const start = (reverse ? newTurnNumber : currentTurn) + 1;
 		const end = reverse ? currentTurn : newTurnNumber;
 
+		/* Reset any highlighted "to clear" cells if going backwards. */
+		if(toClearCoords[currentTurn]) {
+			for (let coords of toClearCoords[currentTurn])
+				getCell(coords).changeState('unknown');
+		}
+
+		/* Set all cell data between old turn and new turn, or remove it if
+		going backwards */
 		for (let i = start; i <= end; i++) {
 			for (let cellData of gameTurns[i]) {
-				gameGrid[cellData.coords[0]][cellData.coords[1]].changeState(
+				getCell(cellData.coords).changeState(
 					reverse ? 'unknown' : cellData.state,
 					cellData.surrounding
 				);
 			}
 		}
 
-		currentTurn = newTurnNumber;
+		/* Set new "to clear" cells */
+		if(toClearCoords[newTurnNumber]) {
+			for (let coords of toClearCoords[newTurnNumber])
+				getCell(coords).changeState('toClear');
+		}
+
+		/* TODO: Change state of currently flagged cells from debug info, but
+		only if the cell is otherwise 'unknown'. May switch this to allow
+		cells to be shown as both unknown and whatever else they are. */
 
 		$gameArea.prepend($gameTable);
 
 		displayDebug(
-			$("#debugAreaTurn"), () => debugInfo[currentTurn].gameInfo
+			$("#debugAreaTurn"), () => debugInfo[newTurnNumber].gameInfo
 		);
+
+		currentTurn = newTurnNumber;
 	}
 
 	/* Perform a turn: send request to server */
@@ -170,12 +184,8 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		});
 	};
 
-	const cellId = coords => {
-		return `cell-${coords[0]}-${coords[1]}`;
-	}
-
-	const $getCell = coords => {
-		return $(`#${cellId(coords)}`);
+	const getCell = coords => {
+		return gameGrid[coords[0]][coords[1]];
 	}
 
 	/* Disable user game actions when viewing a past turn, or someone else's
@@ -212,7 +222,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		fading. */
 		const hoverSurrounding = hoverOn => {
 			for(const c of surroundingUnknownCoords()){
-				$getCell(c).toggleClass("cellHover", hoverOn);
+				getCell(c).$elm.toggleClass("cellHover", hoverOn);
 			}
 		}
 
@@ -225,8 +235,11 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		}
 
 		this.$elm = $("<td>")
-			.attr('id', cellId(coords))
 			.addClass("cell laminate");
+
+		this.getDebug = () => {
+			return debugInfo[currentTurn].cellInfo[coords.toString()];
+		}
 
 		/* Change state of one cell; perform internal data & GUI changes */
 		this.changeState = (newStateName, surrCount) => {
@@ -257,6 +270,9 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 						() => { hoverSurrounding(true); } : undefined,
 					mouseout : surrCount > 0 ?
 						() => { hoverSurrounding(false); } : undefined
+				},
+				toClear : {
+					class : 'cellToClear'
 				}
 			};
 
@@ -295,10 +311,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 
 			if(debug) {
 				this.$elm.on('click', () => {
-					displayDebug(
-						$("#debugAreaCell"),
-						() => debugInfo[currentTurn].cellInfo[coords.toString()]
-					)
+					displayDebug($("#debugAreaCell"), this.getDebug);
 				});
 			}
 
@@ -319,7 +332,14 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		const data = JSON.parse(resp.data);
 		const turnNumber = data.turn;
 
-		newTurn(data.newCellData, turnNumber);
+		/* Add turn new data from server to list & GUI */
+		gameTurns[turnNumber] = data.newCellData;
+		$("#turnList").append($("<li>")
+			.click(() => { displayTurn(turnNumber); })
+			.text("Turn")
+			.attr("value", turnNumber)
+		);
+
 		displayTurn(turnNumber);
 		latestTurn = turnNumber;
 
@@ -331,7 +351,10 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 
 	debug && serverWatcher.addEventListener('debug', (resp) => {
 		const data = JSON.parse(resp.data);
-		debugInfo[data.turn] = data.debug;
+		const turnNumber = data.turn;
+
+		debugInfo[turnNumber] = data.debug;
+		toClearCoords[turnNumber] = data.toClear;
 	});
 
 	let $gameTable = $("<table>");

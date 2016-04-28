@@ -20,12 +20,12 @@ import progressbar # github.com/coagulant/progressbar-python3
 from guess_ais import *
 from server_json_wrapper import JSONServerWrapper
 
-REPEATS_PER_CONFIG = 3
-DIMS_LEN = 8
+REPEATS_PER_CONFIG = 1
+DIMS_LEN = 20
 NUM_DIMS = 2
 SEEDS_SEED = 7
-MINES_MIN = 5
-MINES_MAX = 5
+MINES_MIN = 80
+MINES_MAX = 80
 #MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients
@@ -40,10 +40,10 @@ else:
 
 plot_clients = [
 	#("blue", ReactiveClient),
-	("green", ReactiveClientCheckShared),
+	#("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
-	#("orange", ReactiveClientAvgEmptiesBalanced),
+	("orange", ReactiveClientAvgEmptiesBalanced),
 	#("purple", ReactiveClientExhaustiveTest),
 	#("pink", ReactiveClientExhaustiveSplit),
 ]

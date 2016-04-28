@@ -6,19 +6,19 @@ from reactive_ai import *
 
 # Just finds first cleared cell with surrounding unknown empties.
 class ReactiveClientGuess(ReactiveClient):
-	# TODO: Refactor to use the function inReactiveClientExhaustiveTest, and see
-	# if speed is noticeably affected. If not, just replace all the
+	# TODO: Refactor to use the function in ReactiveClientExhaustiveTest, and
+	# see if speed is noticeably affected. If not, just replace all the
 	# get_adjacent_unknown_cells functions with that one.
 	def get_adjacent_unknown_cells(self):
 		# TODO: Sometimes returns None; figure out the situation that causes
 		# this and see what might be the next best thing to do (just pick random
 		# unknown?)
-		for surr_empt_cell in self.known_cells[EMPTY]:
+		for surr_empt_cell in self.known_cells[State.EMPTY]:
 			if surr_empt_cell.unkn_surr_empt_cnt <= 0:
 				continue
 
 			for unk_cell in surr_empt_cell.surr_cells:
-				if unk_cell.state == UNKNOWN:
+				if unk_cell.state == State.UNKNOWN:
 					yield (unk_cell, surr_empt_cell)
 
 	def get_guess_cell(self):
@@ -45,7 +45,7 @@ class ReactiveClientGuessAny(ReactiveClient):
 	def get_guess_cell(self):
 		while True:
 			cell = self.game_grid[self.random_coords()]
-			if cell.state == UNKNOWN:
+			if cell.state == State.UNKNOWN:
 				return cell
 
 # For all unknowns next to an empty, sum the unknown surrounding empty count vs
@@ -71,9 +71,9 @@ class ReactiveClientAvgEmpties(ReactiveClientGuess):
 
 	def get_adjacent_unknown_cells(self):
 		unk_cells = {}
-		for surr_empt_cell in self.known_cells[EMPTY]:
+		for surr_empt_cell in self.known_cells[State.EMPTY]:
 			for unk_cell in (
-				c for c in surr_empt_cell.surr_cells if c.state == UNKNOWN
+				c for c in surr_empt_cell.surr_cells if c.state == State.UNKNOWN
 			):
 				if unk_cell not in unk_cells:
 					unk_cells[unk_cell] = []
@@ -108,10 +108,10 @@ class ReactiveClientAvgEmptiesAll(ReactiveClientAvgEmpties):
 	def get_all_unknown_cells(self):
 		for coords in self.all_coords():
 			cell = self.game_grid[coords]
-			if cell.state != UNKNOWN:
+			if cell.state != State.UNKNOWN:
 				continue
 
-			yield (cell, (c for c in cell.surr_cells if c.state == EMPTY))
+			yield (cell, (c for c in cell.surr_cells if c.state == State.EMPTY))
 
 class ReactiveClientAvgEmptiesBalanced(ReactiveClientAvgEmptiesAll):
 	def landlocked_cell_score(self):
@@ -122,26 +122,26 @@ class ReactiveClientAvgEmptiesBalanced(ReactiveClientAvgEmptiesAll):
 class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 	# TODO: add to the cell_state_lookups list in the superclass, instead of
 	# replacing it.
-	cell_state_lookups = [ TO_CLEAR, EMPTY, MINE ]
+	cell_state_lookups = [ State.TO_CLEAR, State.EMPTY, State.MINE ]
 	split_edge_cells = False
 
 	def get_adjacent_unknown_cells(self):
 		# TODO: Sometimes returns None; figure out the situation that causes
 		# this and see what might be the next best thing to do (just pick random
 		# unknown?)
-		for surr_empt_cell in self.known_cells[EMPTY]:
+		for surr_empt_cell in self.known_cells[State.EMPTY]:
 			if surr_empt_cell.unkn_surr_empt_cnt <= 0:
 				continue
 
 			for unk_cell in surr_empt_cell.surr_cells:
-				if unk_cell.state == UNKNOWN:
+				if unk_cell.state == State.UNKNOWN:
 					yield unk_cell
 
 	def get_guess_cell(self):
 		# For each cleared mine, check that this configuration gives it the
 		# correct number of new surrounding mines.
 		def test_valid(edge_mines):
-			for empty_cell in self.known_cells[EMPTY]:
+			for empty_cell in self.known_cells[State.EMPTY]:
 				unkn_mine_count = empty_cell.unkn_surr_mine_cnt
 
 				if unkn_mine_count == 0:
@@ -168,7 +168,7 @@ class ReactiveClientExhaustiveTest(ReactiveClientAvgEmpties):
 
 			return [s for s in sets if s]
 
-		mines_left = self.server.mines - len(self.known_cells[MINE])
+		mines_left = self.server.mines - len(self.known_cells[State.MINE])
 		edge_cells = frozenset(self.get_adjacent_unknown_cells())
 		edge_mine_tally = { c : 0 for c in edge_cells }
 

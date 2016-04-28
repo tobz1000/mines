@@ -41,6 +41,10 @@ input[type=number] {
 	background-color: #ff5555;
 }
 
+.cellToClear {
+	background-color: #eeee66;
+}
+
 .cellHover {
 	background-color: #dddddd;
 }

@@ -5,6 +5,7 @@ import itertools
 import time
 import inspect
 import traceback
+import enum
 
 from server_json_wrapper import JSONServerWrapper
 from internal_server import (
@@ -20,11 +21,11 @@ from internal_server import (
 # 3: Progress of single game with start/end info
 VERBOSITY = 0
 
-# Ghetto enum
-MINE = -1
-UNKNOWN = -2
-EMPTY = -3
-TO_CLEAR = -4
+class State(enum.Enum):
+	MINE = -1
+	UNKNOWN = -2
+	EMPTY = -3
+	TO_CLEAR = -4
 
 def log(verbosity, *args, **kwargs):
 	if(VERBOSITY >= verbosity):
@@ -65,7 +66,7 @@ class ReactiveClient(object):
 	wait_time = None
 
 	# Types of cell to track in reverse-lookup dicts
-	cell_state_lookups = [ TO_CLEAR, EMPTY ]
+	cell_state_lookups = [ State.TO_CLEAR, State.EMPTY ]
 
 	def __init__(self, server, first_coords=None):
 		self.server = server
@@ -142,21 +143,21 @@ class ReactiveClient(object):
 			first_coords = (0,) * len(self.server.dims)
 
 		log(3, "Clearing... ", end='', flush=True)
-		self.game_grid[first_coords].state = TO_CLEAR
+		self.game_grid[first_coords].state = State.TO_CLEAR
 		while True:
 			self.clear_cells()
 
 	def clear_cells(self):
-		if not any(self.known_cells[TO_CLEAR]):
+		if not any(self.known_cells[State.TO_CLEAR]):
 			guess_cell = self.get_guess_cell()
 
 			if guess_cell is None:
 				raise GameEnd(self, "Out of ideas!")
 
 			log(2, "(?)", end='', flush=True)
-			guess_cell.state = TO_CLEAR
+			guess_cell.state = State.TO_CLEAR
 
-		coords_list = tuple(cell.coords for cell in self.known_cells[TO_CLEAR])
+		coords_list = tuple(c.coords for c in self.known_cells[State.TO_CLEAR])
 
 		log(2, "{}".format(len(coords_list)), end='', flush=True)
 
@@ -182,17 +183,15 @@ class ReactiveClient(object):
 			surr_mine_count = cell_data["surrounding"]
 
 			cell.state = {
-				'empty':	EMPTY,
-				'cleared':	EMPTY,
-				'mine':		MINE,
-				'unknown':	UNKNOWN
+				'empty':	State.EMPTY,
+				'cleared':	State.EMPTY,
+				'mine':		State.MINE,
+				'unknown':	State.UNKNOWN
 			}[cell_data["state"]]
 
 			# This check avoids unnecessary calculations on zero-cells; can
 			# speed up some games a lot.
 			if surr_mine_count > 0 or not self.server.clears_zeroes:
-				#if cell.coords == (2, 2):
-				#	print("mines {}".format(surr_mine_count))
 				cell.unkn_surr_mine_cnt += surr_mine_count
 				cell.unkn_surr_empt_cnt -= surr_mine_count
 
@@ -230,11 +229,11 @@ class SharedUnknownSurrCounts(dict):
 				new_empties = cell1.surr_cells - cell2.surr_cells
 				new_mines = cell2.surr_cells - cell1.surr_cells
 				for cell in new_empties:
-					if cell.state == UNKNOWN:
-						cell.state = TO_CLEAR
+					if cell.state == State.UNKNOWN:
+						cell.state = State.TO_CLEAR
 				for cell in new_mines:
-					if cell.state == UNKNOWN:
-						cell.state = MINE
+					if cell.state == State.UNKNOWN:
+						cell.state = State.MINE
 				break
 		super().__setitem__(other_cell, val)
 
@@ -257,7 +256,7 @@ class Cell(object):
 		self.coords = coords
 		self.parent_game = parent_game
 
-		self._state = UNKNOWN
+		self._state = State.UNKNOWN
 		self._surr_cells = None
 		self._unkn_surr_mine_cnt = 0
 		self._unkn_surr_empt_cnt = None
@@ -294,19 +293,22 @@ class Cell(object):
 
 		self._state = val
 
-		if val == MINE:
+		if val == State.MINE:
 			for cell in self.surr_cells:
 				cell.unkn_surr_mine_cnt -= 1
 
-		if val == EMPTY:
+		if val == State.EMPTY:
 			for cell in self.surr_cells:
 				cell.unkn_surr_empt_cnt -= 1
 
 		# Update the number of shared unknowns for each pair of surrounding
 		# cells
-		if self.parent_game.check_shared and (val == EMPTY or val == MINE):
+		if (
+			self.parent_game.check_shared and
+			(val == State.EMPTY or val == State.MINE)
+		):
 			for c1, c2 in itertools.combinations(
-				(c for c in self.surr_cells if c.state == EMPTY),
+				(c for c in self.surr_cells if c.state == State.EMPTY),
 				2
 			):
 				c1.shared_unkn_surr_cnts[c2] -= 1
@@ -330,10 +332,10 @@ class Cell(object):
 
 	@unkn_surr_mine_cnt.setter
 	def unkn_surr_mine_cnt(self, val):
-		if val == 0 and self.state == EMPTY:
+		if val == 0 and self.state == State.EMPTY:
 			for cell in self.surr_cells:
-				if cell.state == UNKNOWN:
-					cell.state = TO_CLEAR
+				if cell.state == State.UNKNOWN:
+					cell.state = State.TO_CLEAR
 		self._unkn_surr_mine_cnt = val
 
 	@property
@@ -346,8 +348,8 @@ class Cell(object):
 	def unkn_surr_empt_cnt(self, val):
 		if val == 0:
 			for cell in self.surr_cells:
-				if cell.state == UNKNOWN:
-					cell.state = MINE
+				if cell.state == State.UNKNOWN:
+					cell.state = State.MINE
 		self._unkn_surr_empt_cnt = val
 
 def play_game(dims, mines, repeats=1):
