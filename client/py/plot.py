@@ -40,10 +40,10 @@ else:
 
 plot_clients = [
 	#("blue", ReactiveClient),
-	#("green", ReactiveClientCheckShared),
+	("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),
-	("orange", ReactiveClientAvgEmptiesBalanced),
+	#("orange", ReactiveClientAvgEmptiesBalanced),
 	#("purple", ReactiveClientExhaustiveTest),
 	#("pink", ReactiveClientExhaustiveSplit),
 ]

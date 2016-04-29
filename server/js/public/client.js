@@ -159,9 +159,14 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 				getCell(coords).changeState('unknown');
 		}
 
-		/* Remove flags, in case the client allows unflagging between turns.. */
-		if(flaggedCoords[currentTurn]) {
-			for (let coords of flaggedCoords[currentTurn])
+		/* Remove flags - even going forwards, in case the client allows
+		unflagging between turns. */
+		let flaggedList = (
+			flaggedCoords[currentTurn] ||
+			flaggedCoords[currentTurn - 1]
+		);
+		if(flaggedList) {
+			for (let coords of flaggedList)
 				getCell(coords).changeState('unknown');
 		}
 
@@ -184,8 +189,8 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 
 		/* Show flagged mines from client's debug. Show previous turn's flags if
 		the current turn's debug is unavailable. */
-		let flaggedList;
-		if(flaggedList = flaggedCoords[newTurn] || flaggedCoords[newTurn - 1]) {
+		flaggedList = (flaggedCoords[newTurn] || flaggedCoords[newTurn - 1]);
+		if(flaggedList) {
 			for (let coords of flaggedList)
 				getCell(coords).changeState('flagged');
 		}
@@ -197,6 +202,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 			() => debugInfo[newTurn].gameInfo
 		);
 
+		/* Remove cell debug display */
 		displayDebug($("#debugAreaCell"));
 
 		currentTurn = newTurn;
