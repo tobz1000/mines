@@ -69,7 +69,8 @@ const displayDebug = ($elm, contentGetter) => {
 
 	try {
 		debugObj = contentGetter();
-	/* If debug for a specific cell/turn doesn't exist, ignore. */
+	/* If debug for a specific cell/turn doesn't exist, show nothing in the
+	HTML element. */
 	} catch (e) {
 		if(!(e instanceof TypeError))
 			throw e;
@@ -120,6 +121,12 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	/* Retroactive list of cells the client intended to clear next, for each
 	previous turn in the game. */
 	const toClearCoords = {};
+	/* Retroactive list of flagged cells, extracted from client debug. Info from
+	last available turn is used for latest turn, since latest turn's debug won't
+	be available. */
+	/* TODO: refactor this and toClearCoords into a table of info for "flagged"
+	and "toClear", sharing code functionality. */
+	const flaggedCoords = {};
 	/* Debug info for each turn */
 	const debugInfo = {};
 	let currentTurn = -1;
@@ -134,7 +141,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		}
 	)
 
-	const displayTurn = newTurnNumber => {
+	const displayTurn = newTurn => {
 		/* When loading a new game, don't render anything until data for the
 		latest turn has been loaded (and the number of the latest turn is
 		retrieved). */
@@ -142,13 +149,19 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 			return;
 
 		$gameTable.detach();
-		const reverse = newTurnNumber < currentTurn;
-		const start = (reverse ? newTurnNumber : currentTurn) + 1;
-		const end = reverse ? currentTurn : newTurnNumber;
+		const reverse = newTurn < currentTurn;
+		const start = (reverse ? newTurn : currentTurn) + 1;
+		const end = reverse ? currentTurn : newTurn;
 
 		/* Reset any highlighted "to clear" cells if going backwards. */
 		if(reverse && toClearCoords[currentTurn]) {
 			for (let coords of toClearCoords[currentTurn])
+				getCell(coords).changeState('unknown');
+		}
+
+		/* Remove flags, in case the client allows unflagging between turns.. */
+		if(flaggedCoords[currentTurn]) {
+			for (let coords of flaggedCoords[currentTurn])
 				getCell(coords).changeState('unknown');
 		}
 
@@ -164,25 +177,34 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 		}
 
 		/* Set new "to clear" cells */
-		if(toClearCoords[newTurnNumber]) {
-			for (let coords of toClearCoords[newTurnNumber])
+		if(toClearCoords[newTurn]) {
+			for (let coords of toClearCoords[newTurn])
 				getCell(coords).changeState('toClear');
 		}
 
-		/* TODO: Change state of currently flagged cells from debug info, but
-		only if the cell is otherwise 'unknown'. May switch this to allow
-		cells to be shown as both unknown and whatever else they are. */
+		/* Show flagged mines from client's debug. Show previous turn's flags if
+		the current turn's debug is unavailable. */
+		let flaggedList;
+		if(flaggedList = flaggedCoords[newTurn] || flaggedCoords[newTurn - 1]) {
+			for (let coords of flaggedList)
+				getCell(coords).changeState('flagged');
+		}
 
 		$gameArea.prepend($gameTable);
 
 		displayDebug(
-			$("#debugAreaTurn"), () => debugInfo[newTurnNumber].gameInfo
+			$("#debugAreaTurn"),
+			() => debugInfo[newTurn].gameInfo
 		);
 
-		currentTurn = newTurnNumber;
+		displayDebug($("#debugAreaCell"));
+
+		currentTurn = newTurn;
 	}
 
 	/* Perform a turn: send request to server */
+	/* TODO: send list of currently flagged cell to server, so they can be
+	displayed properly when the game is played back. */
 	const clearCells = coordsArr => {
 		if(!pass)
 			throw new Error(`Don't have the password for game '${id}'`);
@@ -245,12 +267,12 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 			hoverSurrounding(false);
 		}
 
-		this.$elm = $("<td>")
-			.addClass("cell laminate");
-
-		this.getDebug = () => {
+		const getDebug = () => {
 			return debugInfo[currentTurn].cellInfo[coords.toString()];
 		}
+
+		this.$elm = $("<td>")
+			.addClass("cell laminate");
 
 		/* Change state of one cell; perform internal data & GUI changes */
 		this.changeState = (newStateName, surrCount) => {
@@ -324,7 +346,7 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 
 			if(debug) {
 				this.$elm.on('click', () => {
-					displayDebug($("#debugAreaCell"), this.getDebug);
+					displayDebug($("#debugAreaCell"), getDebug);
 				});
 			}
 
@@ -372,9 +394,21 @@ const ClientGame = function(id, dims, mines, pass, debug) {
 	debug && serverWatcher.addEventListener('debug', (resp) => {
 		const data = JSON.parse(resp.data);
 		const turnNumber = data.turn;
+		/* How the client indicates a cell is flagged (v. specific to python
+		client). */
+		const flaggedIndicator = info => info._state == "State.MINE";
 
 		debugInfo[turnNumber] = data.debug;
+
 		toClearCoords[turnNumber] = data.toClear;
+
+		flaggedCoords[turnNumber] = [];
+		if(data.debug.cellInfo) {
+			$.each(data.debug.cellInfo, (key, cellInfo) => {
+				if(flaggedIndicator(cellInfo))
+					flaggedCoords[turnNumber].push(cellInfo.coords);
+			});
+		}
 	});
 
 	let $gameTable = $("<table>");
