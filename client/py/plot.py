@@ -20,18 +20,17 @@ import progressbar # github.com/coagulant/progressbar-python3
 from guess_ais import *
 from server_json_wrapper import JSONServerWrapper
 
-REPEATS_PER_CONFIG = 1
-DIMS_LEN = 30
+REPEATS_PER_CONFIG = 50
+DIMS_LEN = 6
 NUM_DIMS = 2
 SEEDS_SEED = 7
-MINES_MIN = 100
-MINES_MAX = 100
-#MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
+MINES_MIN = 1
+MINES_MAX = (DIMS_LEN ** NUM_DIMS) // 2
 
 # Reduce this when using very slow clients
-POOL_MAX_CHUNKSIZE = 10
+POOL_MAX_CHUNKSIZE = 100
 
-SERVER = JSONServerWrapper
+SERVER = PythonInternalServer
 
 if hasattr(multiprocessing, "cpu_count"):
 	no_cores = multiprocessing.cpu_count()
@@ -39,7 +38,7 @@ else:
 	no_cores = 1
 
 plot_clients = [
-	#("blue", ReactiveClient),
+	("blue", ReactiveClient),
 	("green", ReactiveClientCheckShared),
 	#("red", ReactiveClientGuess),
 	#("cyan", ReactiveClientGuessAny),

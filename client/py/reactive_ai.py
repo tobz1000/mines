@@ -210,44 +210,34 @@ class GameGrid(dict):
 			self.__setitem__(coords, Cell(coords, self.parent_game))
 		return super().__getitem__(coords)
 
+# The number of unknown cells which surround both of two cells. While this is
+# accessed from dictionaries on either cell, it is only actually stored on one
+# of the two (the other just defers to it).
 class SharedUnknownSurrCounts(dict):
 	def __init__(self, this_cell):
 		self.this_cell = this_cell
 
 	def __setitem__(self, other_cell, val):
-		# The exclusive surrounding cells of two shared cells can be set if
-		# we're sure one's exclusive cells must all be mines, and the other's
-		# must all be clear (with the shared cells' states still unknown).
-		for (cell1, cell2) in (
-			(self.this_cell, other_cell),
-			(other_cell, self.this_cell)
-		):
-			if (
-				cell1.unkn_surr_mine_cnt < val and
-				cell2.unkn_surr_empt_cnt < val
-			):
-				new_empties = cell1.surr_cells - cell2.surr_cells
-				new_mines = cell2.surr_cells - cell1.surr_cells
-				for cell in new_empties:
-					if cell.state == State.UNKNOWN:
-						cell.state = State.TO_CLEAR
-				for cell in new_mines:
-					if cell.state == State.UNKNOWN:
-						cell.state = State.MINE
-				break
+		if id(other_cell) > id(self.this_cell):
+			other_cell.shared_unkn_surr_cnts[self.this_cell] = val
+			return
 		super().__setitem__(other_cell, val)
+		if (
+			self.this_cell.state == State.EMPTY and
+			other_cell.state == State.EMPTY
+		):
+			self.this_cell.check_exclusive_cells_saturated(other_cell)
 
 	def __getitem__(self, other_cell):
-		# Get the value from the other cell if it has it. If neither has it,
+		if id(other_cell) > id(self.this_cell):
+			return other_cell.shared_unkn_surr_cnts[self.this_cell]
+		# Get the value from the other cell if it has it. If not set yet,
 		# count how many cells are shared *total* (no UNKNOWN check), since when
 		# it's first accessed, all involved cells should be unknown.
 		if not other_cell in self:
-			if self.this_cell in other_cell.shared_unkn_surr_cnts:
-				val = other_cell.shared_unkn_surr_cnts[self.this_cell]
-			else:
-				# TODO: figure out formula based on coords values instead of
-				# compared sets, see if it's quicker
-				val = len(self.this_cell.surr_cells & other_cell.surr_cells)
+			# TODO: figure out formula based on coords values instead of
+			# compared sets; see if it's quicker.
+			val = len(self.this_cell.surr_cells & other_cell.surr_cells)
 			self.__setitem__(other_cell, val)
 		return super().__getitem__(other_cell)
 
@@ -300,6 +290,8 @@ class Cell(object):
 		if val == State.EMPTY:
 			for cell in self.surr_cells:
 				cell.unkn_surr_empt_cnt -= 1
+				if self.parent_game.check_shared:
+					self.check_exclusive_cells_saturated(cell)
 
 		# Update the number of shared unknowns for each pair of surrounding
 		# cells
@@ -308,7 +300,7 @@ class Cell(object):
 			(val == State.EMPTY or val == State.MINE)
 		):
 			for c1, c2 in itertools.combinations(
-				(c for c in self.surr_cells if c.state == State.EMPTY),
+				(c for c in self.surr_cells if c.state != State.MINE),
 				2
 			):
 				c1.shared_unkn_surr_cnts[c2] -= 1
@@ -351,6 +343,29 @@ class Cell(object):
 				if cell.state == State.UNKNOWN:
 					cell.state = State.MINE
 		self._unkn_surr_empt_cnt = val
+
+	# The exclusive surrounding cells of two shared cells can be set if
+	# we're sure one's exclusive cells must all be mines, and the other's
+	# must all be clear (with the shared cells' states still unknown).
+	def check_exclusive_cells_saturated(self, other_cell):
+		mutual_count = self.shared_unkn_surr_cnts[other_cell]
+		for (cell1, cell2) in (
+			(self, other_cell),
+			(other_cell, self)
+		):
+			if (
+				cell1.unkn_surr_mine_cnt < mutual_count and
+				cell2.unkn_surr_empt_cnt < mutual_count
+			):
+				new_empties = cell1.surr_cells - cell2.surr_cells
+				new_mines = cell2.surr_cells - cell1.surr_cells
+				for cell in new_empties:
+					if cell.state == State.UNKNOWN:
+						cell.state = State.TO_CLEAR
+				for cell in new_mines:
+					if cell.state == State.UNKNOWN:
+						cell.state = State.MINE
+				return
 
 def play_game(dims, mines, repeats=1):
 	played_games = []
