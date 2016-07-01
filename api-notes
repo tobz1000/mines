@@ -1,0 +1,204 @@
+* "domain": A set of entities which interact using a particular API.
+
+* "wrapper": An entity which has roles in two domains, acting as different
+entity types in each domain, in order to allow other entities from the two
+domains to interact with one another. E.g. A Python client would interact with a
+JSON server through a wrapper, which would interface as a Python server with the
+client, and a JSON client with the server.
+
+* "server": An entity which fulfills game requests, handles turns requested by a
+client and relays the result of the move. The updated state of the game (game
+over, newly-cleared cells & surrounding values, remaining uncleared cell count
+etc.) is sent as a response to clients on each turn.
+
+* "client": An entity which requests a game instance from a server with given
+parameters. Performs turns based on information about the game from the server,
+updated after each turn the client takes.
+
+* "manager": An entity which can communicate with clients, and request them to
+start a game or series of games with specified parameters.
+
+=JSON domain=
+Entities which interact using JSON messages. Currently implemented over HTTP
+only.
+
+Includes a native server and manager, the latter of which is accessed via web
+GUI.
+
+Clients are a web GUI client (human player), and the JSONServerWrapper wrapper,
+to interface with Python clients.
+
+=="/manager": Manager request API==
+
+==="/manager/init"===
+Initialises a game/batch of games. Array of different settings, and each setting
+can also take a "repeat" count. This doesn't start a game, but instructs the
+manager to send an "order" for the specified games. Only value for "domain" is
+"python" currently. May be expanded if clients are implemented in other
+languages - and therefore require a different shim.
+
+====Params====
+[{
+	domain : "python"
+	domain-options : {
+		client : <str>
+		server : <str>
+	},
+	dims : [<int>, ...],
+	mines: <int>,
+	(repeats : <int>)
+}, ...]
+
+====Returns====
+
+
+=="/server": JSON game server==
+A NodeJS game server which communicates with clients in JSON. Currently
+available clients are the web client, for human play; and a wrapper for clients
+in the Python domain. Actions return a <json-server-game-state>:
+{
+	id : <str>,
+	seed : <str>,
+	gameOver : <bool>,
+	win : <bool>,
+	dims : [<int>, ...],
+	mines : <int>,
+	cellsRem : <int>,
+	turn : <int>,
+	(newCellData : [{
+		coords : [<int>, ...],
+		surrounding : <int>,
+		state : <"empty"|"mine"|"cleared"|"unknown">
+	}, ...])
+}
+
+'id' is an ID for this game instance, chosen by the server. Should be unique to
+this game instance.
+'cellsRem' is the number of non-mine cells left to clear.
+'turn' is the current turn count of the game; starting at 0 on a new game.
+'seed', in conjunction with dims and mines, is a deterministic indicator of the
+placement of mines.
+
+==="/server/newGame"===
+====Params====
+{
+	dims : [<int>, ...],
+	mines : <int>,
+	user : <str>,
+	(pass : <str>,)
+	(seed : <str>)
+}
+
+'seed' can optionally be used to request a previously-played game, or play the
+same game
+more than once.
+
+====Returns====
+<json-server-game-state>
+
+==="/server/clearCells"===
+Specify a list of cells to clear.
+
+====Params====
+{
+	id : <str>,
+	pass : <str>,
+	coords : [[<int>, ...], ...]
+}
+
+'id' must be a previously-requested game which has not finished.
+'pass' is the password specified when the game was requested, if any.
+
+====Returns====
+<json-server-game-state>
+
+'newCellData' may contain cells which were not specified by the client for that
+turn, because the JSON server will automatically clear the cells surrounding
+a cell with 0 adjacent mines (recursively). This can greatly decrease JSON
+traffic and improve game speed.
+
+=Python domain=
+Python entities, mostly classes, communicating primarily through function calls;
+although clients are initiated by the JSON manager by running the game_init.py
+script, with JSON-formatted arguments.
+
+Includes a multitude of AI client variations, and two servers: an internal
+Python server, and a wrapper for the JSON server.
+
+=="game_init.py": shim for manager/command-line game initialisation==
+Takes a single string argument in the form of a JSON array, with a list of game
+specifications to be played:
+[{
+	dims : [<int>, ...],
+	mines : <int>,
+	(repeats : <int>),
+	(client : <str>,)
+	(server : <str>)
+}, ...]
+
+Each specification can optionally include the number of game instances to play,
+as the 'repeats' value. 'client' and 'server' can be specified, as the name of
+the class to use. They default to ReactiveClient and PythonInternalServer,
+respectively, if omitted.
+
+==Clients==
+A Python client is passed a server instance as a constructor argument. Once
+constructed, it will begin playing the game until it wins, loses or gives up.
+
+The base sources/mines/py/venv client class is ReactiveClient.
+
+===Constructor signature===
+ReactiveClient(server, first_coords=None)
+
+'first_coords' specifies which single cell to clear on the first turn. A value
+of None (default) allows the client to decide.
+
+Subclasses may implement additional optional arguments.
+
+==Server API==
+Servers:
+* JSONServerWrapper
+* PythonInternalServer
+
+===Constructor signature===
+Server(dims, mines, seed=None)
+
+'seed' can be used to play a game again, or play the same game multiple times.
+
+===Properties===
+Both servers possess the following publicly readable properties:
+.seed : <str>
+.clears_zeroes : <bool>
+.dims : [<int>, ...]
+.mines : <int>
+.cells_rem : <int>
+.game_over : <bool>
+.win : <bool>
+
+'clears_zeroes' specifies whether the server will automatically clear the cells
+surrounding a cell with 0 adjacent mines, before returning the result of a turn.
+This allows clients to take some logical shortcuts and may increase speed if so.
+This value is False for PythonInternalServer, and True for JSONServerWrapper.
+
+Clients should check the value of 'game_over' on each turn (and subsequently
+'win' if 'game_over' is True), since this information is not sent in the
+response to a turn.
+
+===clear_cells===
+Function called by client to perform a turn.
+
+====Params====
+.clear_cells(coords_list : [[<int>, ...], ...])
+
+====Returns====
+An array of dicts of newly-cleared cell information:
+[{
+	"coords" : [<int>, ...],
+	"surrounding" : <int>,
+	"state" : <"empty"|"mine"|"cleared"|"unknown">
+}, ...]
+
+If the game is lost, PythonInternalServer will return an empty array.
+
+JSONServerWrapper however will always directly return the "newCellData" field of
+the JSON Server's response.
