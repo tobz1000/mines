@@ -30,7 +30,7 @@ to interface with Python clients.
 
 =="/manager": Manager request API==
 
-==="/manager/init"===
+===initiate===
 Initialises a game/batch of games. Array of different settings, and each setting
 can also take a "repeat" count. This doesn't start a game, but instructs the
 manager to send an "order" for the specified games. Only value for "domain" is
@@ -38,19 +38,22 @@ manager to send an "order" for the specified games. Only value for "domain" is
 languages - and therefore require a different shim.
 
 ====Params====
-[{
-	domain : "python"
-	domain-options : {
-		client : <str>
-		server : <str>
-	},
-	dims : [<int>, ...],
-	mines: <int>,
-	(repeats : <int>)
-}, ...]
+{
+	action : "initiate",
+	games : [{
+		domain : "python"
+		domain-options : {
+			client : <str>
+			server : <str>
+		},
+		dims : [<int>, ...],
+		mines: <int>,
+		(repeats : <int>)
+	}, ...]
+}
 
 ====Returns====
-
+[TODO]
 
 =="/server": JSON game server==
 A NodeJS game server which communicates with clients in JSON. Currently
@@ -79,9 +82,10 @@ this game instance.
 'seed', in conjunction with dims and mines, is a deterministic indicator of the
 placement of mines.
 
-==="/server/newGame"===
+===newGame===
 ====Params====
 {
+	action : "newGame",
 	dims : [<int>, ...],
 	mines : <int>,
 	user : <str>,
@@ -96,13 +100,14 @@ more than once.
 ====Returns====
 <json-server-game-state>
 
-==="/server/clearCells"===
+===clearCells===
 Specify a list of cells to clear.
 
 ====Params====
 {
+	action : "clearCells",
 	id : <str>,
-	pass : <str>,
+	(pass : <str>,)
 	coords : [[<int>, ...], ...]
 }
 
