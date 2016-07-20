@@ -130,6 +130,16 @@ script, with JSON-formatted arguments.
 Includes a multitude of AI client variations, and two servers: an internal
 Python server, and a wrapper for the JSON server.
 
+===status===
+====Params====
+{
+	action : "status",
+	id : <str>
+}
+
+====Returns====
+<json-server-game-state>
+
 =="game_init.py": shim for manager/command-line game initialisation==
 Takes a single string argument in the form of a JSON array, with a list of game
 specifications to be played:
