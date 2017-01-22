@@ -4,6 +4,7 @@ const mg = require("mongoose");
 const ndArray = require("ndarray");
 const sse = require("express-eventsource");
 const product = require("./product");
+const manager = require("./manager");
 
 const ReqError = require("./error").ReqError;
 
@@ -303,7 +304,7 @@ const loadGame = async (id) => {
 	return game;
 };
 
-const newGame = async (params) => {
+const newGame = (params) => {
 	const game = new Game(Game.newGameState(params));
 
 	game.save();
@@ -311,9 +312,18 @@ const newGame = async (params) => {
 	return game.userState;
 }
 
+const batchGames = ({ domain, client, dims, mines, repeats }) => {
+	return _.range(repeats).map(() => {
+		const game = newGame({client, dims, mines});
+
+		manager.join(domain, client, game.id);
+		return game.id;
+	});
+};
+
 const listGames = () => {
 	return Game.find({}, "id dims mines clients");
-}
+};
 
 const gameState = async ({id, turn}) => {
 	const game = await loadGame(id);
@@ -403,7 +413,11 @@ module.exports = {
 			// schema : newGameSchema,
 			// returnSchema : gameStateSchema,
 			type : "post",
-			handler : newGame
+			handler : async (params) => newGame(params)
+		},
+		batch : {
+			type : "post",
+			handler : batchGames
 		},
 		turn : {
 			// schema : clearCellsSchema,

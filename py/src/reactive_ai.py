@@ -77,9 +77,8 @@ class ReactiveClient(object):
 		# Reverse lookup table for grid
 		self.known_cells = { s : [] for s in self.cell_state_lookups }
 
-		log(3, "New game: {} (original {}) dims: {} mines: {}".format(
+		log(3, "New game: {} dims: {} mines: {}".format(
 			self.server.id,
-			self.server.reload_id or self.server.id,
 			self.server.dims,
 			self.server.mines
 		))

@@ -36,10 +36,12 @@ class JSONServerWrapper(object):
 	game_over = None
 	win = None
 
-	def __init__(self, dims=None, mines=None, client=None, reload_id=None):
-		self.reload_id = reload_id
+	def __init__(self, dims=None, mines=None, client=None, game_id=None):
+		# self.reload_id = reload_id
 
-		if(dims is not None and mines is not None):
+		if(game_id is not None):
+			resp = self.action("status", {"id": game_id})
+		elif(dims is not None and mines is not None):
 			resp = self.action("new", {
 				"dims": dims,
 				"mines": mines,

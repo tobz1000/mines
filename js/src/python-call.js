@@ -7,7 +7,13 @@ const PythonShell = require("python-shell");
 const pythonRoot = __dirname + "/../../py";
 
 const games = [
-	{ dims : [10,10], mines : 3, server : "JSONServerWrapper", repeats : 10 },
+	{
+		action : "new",
+		dims : [2,2],
+		mines : 1,
+		server : "JSONServerWrapper",
+		repeats : 10
+	},
 ];
 
 const ps = new PythonShell(

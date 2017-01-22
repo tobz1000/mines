@@ -1,27 +1,45 @@
 "use strict";
+const PythonShell = require("python-shell");
 
-const managerInit = async () => {
+const pythonRoot = __dirname + "/../../py";
 
-};
+// const _ = require("underscore");
 
-const batchInitiate = async (params) => {
+// const managerInit = async () => {
 
-};
+// };
 
-const batchInitiate = async (params) => {
+// const batchInitiate = async ({games}) => {
 
-};
+// };
 
-const actions = {
-	initiate : {
-		func : batchInitiate
-	},
-	watch : {
-		func : gameWatcher
-	}
+// module.exports = {
+// 	init : managerInit,
+// 	actions : {
+// 		initiate : {
+// 			func : batchInitiate
+// 		}
+// 	};
+// };
+
+const joinPythonGame = (client, id) => {
+	new PythonShell("game_init.py", {
+		pythonPath : pythonRoot + "/venv/bin/python3",
+		scriptPath : pythonRoot + "/src",
+		args : JSON.stringify([{
+			action : "join",
+			client : client,
+			game_id : id
+		}])
+	}, (err, res) => err && console.error(err)).on(
+		"message", (msg) => console.log(msg)
+	);
+}
+
+const joinGame = (domain, client, id) => {
+	({ "python" : joinPythonGame })[domain](client, id);
 };
 
 module.exports = {
-	init : managerInit,
-	actions : actions
+	join : joinGame
 };

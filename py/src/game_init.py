@@ -12,10 +12,13 @@ def run_game_config(
 	mines,
 	repeats=1,
 	client=guess_ais.ReactiveClient,
-	server=guess_ais.PythonInternalServer
+	server=guess_ais.PythonInternalServer,
 ):
 	for _ in range(repeats):
 		client(server(dims, mines))
+
+def join_game(game_id, client=guess_ais.ReactiveClient):
+	client(guess_ais.PythonInternalServer(game_id))
 
 def str_to_class(obj):
 	"""Get class types from strings for the client/server parameters"""
@@ -27,10 +30,10 @@ def str_to_class(obj):
 if __name__ == '__main__':
 	try:
 		args = json.loads(sys.argv[1], object_hook=str_to_class)
-		print(args)
 	except:
 		print("Must provide parameters as a JSON string.")
 		raise
 	for cfg in args:
-		# Convert JSON strings to class types
-		run_game_config(**cfg)
+		action = {"new": run_game_config, "join": join_game}[cfg.pop("action")]
+		print("{}({})".format(action, cfg))
+		action(**cfg)

@@ -74,10 +74,27 @@ class GameViewer extends React.Component {
 	}
 
 	async newGame(mines, dims, pass) {
-		const resp = await serverAction("new", {mines, dims, pass, client : "Human"});
+		const resp = await serverAction("new", {
+			mines,
+			dims,
+			pass,
+			client : "Human"
+		});
 
 		this.refreshGameList();
 		this.selectGame(resp.id);
+	}
+
+	async newPythonGame(mines, dims, pass) {
+		const resp = await serverAction("batch", {
+			domain : "python",
+			client : "ReactiveClient",
+			dims : dims,
+			mines : mines,
+			repeats : 3
+		})
+
+		console.log(resp);
 	}
 
 	render() {
@@ -95,7 +112,7 @@ class GameViewer extends React.Component {
 					<button onClick={this.refreshGameList}>Refresh list</button>
 					<br />
 					<NewGameDialogue
-						submitFn={this.newGame}
+						submitFn={this.newPythonGame}
 						defaults={{ mines : 10, dim0 : 10, dim1 : 10}}
 					/>
 				</div>
