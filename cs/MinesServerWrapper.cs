@@ -2,31 +2,45 @@ using System;
 using System.Threading.Tasks;
 using System.Net.Http;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
-class MinesServerWrapper {
-	string url;
+interface IMinesServer {
+	ServerResponse status;
+	Task<ServerResponse> Turn(int[] clear, int[] flag, int[] unflag);
+}
+
+class JsonServerWrapper : IMinesServer {
+	string url = "http://localhost:1066/server/";
+	string client;
 	public ServerResponse status;
-	
-	public static async Task<MinesServerWrapper> JoinGame(string url,
-		string id) {
-		var inst = new MinesServerWrapper { url = url };
-		await inst.Action(new Status { id = id });
+
+	public static async Task<JsonServerWrapper> JoinGame(string id,
+		string client) {
+		var inst = new JsonServerWrapper { client = client };
+		await inst.Action(new StatusRequest { id = id });
 		return inst;
 	}
 
-	public static async Task<MinesServerWrapper> NewGame(string url,
-		int[] dims, int mines) {
-		var inst = new MinesServerWrapper { url = url };
+	public static async Task<JsonServerWrapper> NewGame(int[] dims, int mines,
+		string client) {
+		var inst = new JsonServerWrapper { client = client };
 		await inst.Action(new NewGame { dims = dims, mines = mines,
-			client = "CSClient" });
+			client = client });
 		return inst;
 	}
 
-	public Task<ServerResponse> Turn(TurnRequest req) {
+	public Task<ServerResponse> Turn(int[] clear = null, int[] flag = null,
+		int[] unflag = null) {
+		if(clear == null && flag == null && unflag == null)
+			throw new ArgumentNullException();
+
+		var req = new TurnRequest { id = this.status.id, client = this.client,
+			clear = clear, flag = flag, unflag = unflag };
+
 		return this.Action(req);
 	}
 
-	public async Task<ServerResponse> Action(ServerRequest req) {
+	async Task<ServerResponse> Action(ServerRequest req) {
 		using(var client = new HttpClient()) {
 			var resp = await client.PostAsync(this.url + req.action,
 				new StringContent(JsonConvert.SerializeObject(req)));
@@ -41,30 +55,28 @@ class MinesServerWrapper {
 
 	static void Main(string[] args) {
 		Task.Run(async () => {
-			var game = await MinesServerWrapper.NewGame(
-				"http://localhost:1066/server/", new int[] {4, 4}, 3);
-			
+			var game = await JsonServerWrapper.NewGame(new int[] {4, 4}, 3,
+				"CSClient");
+
 			Console.WriteLine(game.status.id);
 		}).Wait();
 	}
 }
 
-public abstract class ServerRequest {
-	public virtual string action {
-		get { return null; }
-	}
+abstract class ServerRequest {
+	public virtual string action { get; }
 }
 
-public class TurnRequest : ServerRequest {
+class TurnRequest : ServerRequest {
 	[JsonIgnoreAttribute]
 	public override string action {
 		get { return "turn"; }
 	}
 	public string id;
-	public int[,] clear;
-	public int[,] flag;
-	public int[,] unflag;
 	public string client;
+	public int[] clear;
+	public int[] flag;
+	public int[] unflag;
 }
 
 class NewGame : ServerRequest {
@@ -77,7 +89,7 @@ class NewGame : ServerRequest {
 	public string client;
 }
 
-class Status : ServerRequest {
+class StatusRequest : ServerRequest {
 	[JsonIgnoreAttribute]
 	public override string action {
 		get { return "status"; }
@@ -85,13 +97,14 @@ class Status : ServerRequest {
 	public string id;
 }
 
-public class ServerResponseCellInfo {
-	public int surrounding;
-	public string state; //TODO - enum?
-	public int[] coords;
-}
-
 public class ServerResponse {
+	public enum CellState { cleared, mines };
+	public class CellInfo {
+		public int surrounding;
+		[JsonConverter(typeof(StringEnumConverter))]
+		public CellState state; //TODO - enum?
+		public int[] coords;
+	}
 	public string id;
 	public int[] dims;
 	public int mines;
@@ -101,7 +114,7 @@ public class ServerResponse {
 	public int cellsRem;
 	public int[,] flagged;
 	public int[,] unflagged;
-	public ServerResponseCellInfo[] clearActual;
+	public CellInfo[] clearActual;
 	public int[,] clearReq;
 	public DateTime turnTakenAt;
 }
