@@ -98,7 +98,7 @@ class StatusRequest : ServerRequest {
 }
 
 public class ServerResponse {
-	public enum CellState { cleared, mines };
+	public enum CellState { cleared, mine };
 	public class CellInfo {
 		public int surrounding;
 		[JsonConverter(typeof(StringEnumConverter))]
