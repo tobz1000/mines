@@ -10,7 +10,7 @@ class GameGrid {
 	public Cell this[int[] i] {
 		get {
 			if(!this.dict.ContainsKey(i)) {
-				this.dict[i] = new Cell(i, this.parentGame);
+				this.dict[i] = new Cell(i, this.client);
 			}
 
 			return this.dict[i];
@@ -19,6 +19,7 @@ class GameGrid {
 
 	public GameGrid(Client client) {
 		this.client = client;
+		this.dict = new Dictionary<int[], Cell>();
 	}
 }
 
@@ -50,7 +51,7 @@ class Client {
 	public void AddKnownCell(Cell cell) {
 		foreach(var d in this.knownCells) {
 			if(cell.state == d.Key) {
-				d.Value.Add(cell)
+				d.Value.Add(cell);
 			} else {
 				d.Value.Remove(cell);
 			}

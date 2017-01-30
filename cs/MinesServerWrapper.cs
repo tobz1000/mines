@@ -5,14 +5,14 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 interface IMinesServer {
-	ServerResponse status;
+	ServerResponse status { get; }
 	Task<ServerResponse> Turn(int[] clear, int[] flag, int[] unflag);
 }
 
 class JsonServerWrapper : IMinesServer {
 	string url = "http://localhost:1066/server/";
 	string client;
-	public ServerResponse status;
+	public ServerResponse status { get; private set; }
 
 	public static async Task<JsonServerWrapper> JoinGame(string id,
 		string client) {
@@ -51,15 +51,6 @@ class JsonServerWrapper : IMinesServer {
 
 			return this.status;
 		}
-	}
-
-	static void Main(string[] args) {
-		Task.Run(async () => {
-			var game = await JsonServerWrapper.NewGame(new int[] {4, 4}, 3,
-				"CSClient");
-
-			Console.WriteLine(game.status.id);
-		}).Wait();
 	}
 }
 
