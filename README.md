@@ -16,6 +16,8 @@ There is also a native, simple Python server which can be used with Python clien
 
 A React-based single-page GUI for viewing played games. Also allows humans to start and play a game on the server.
 
+![Game viewer](vid.gif)
+
 ## Graph plotter
 
 A graph plotter to view the success rate of different clients under different game parameters. The native Python server allows many thousands of games to be played quickly, producing accurate success rate figures.
