@@ -3,6 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+enum CellState { Unknown, ToClear, Empty, Mine };
+
 class GameGrid {
     Client client;
 	Dictionary<int[], Cell> dict;
@@ -24,33 +26,86 @@ class GameGrid {
 }
 
 class Client {
+	enum TurnState { Playing, Finished, GiveUp };
+
 	static string clientName = "CSClient";
 
 	GameGrid grid;
-	Dictionary<Cell.State, HashSet<Cell>> knownCells;
+	Dictionary<CellState, HashSet<Cell>> knownCells;
 	IMinesServer server;
 
+	protected virtual Cell GetGuessCell() => null;
+
 	public Client(IMinesServer server) {
-		this.grid = new GameGrid(this);
 		this.server = server;
-		this.knownCells = new Dictionary<Cell.State, HashSet<Cell>>() {
-			{ Cell.State.ToClear, new HashSet<Cell>() },
-			{ Cell.State.Empty, new HashSet<Cell>() },
-			{ Cell.State.Mine, new HashSet<Cell>() },
+		this.grid = new GameGrid(this);
+		this.knownCells = new Dictionary<CellState, HashSet<Cell>>() {
+			{ CellState.ToClear, new HashSet<Cell>() },
+			{ CellState.Empty, new HashSet<Cell>() },
+			{ CellState.Mine, new HashSet<Cell>() },
 		};
 	}
 
 	void Play() {
-		var firstCoords =
-			(from dim in this.server.status.dims
-			select dim / 2).ToArray();
+		var firstCoords =(
+			from dim in this.server.status.dims
+			select dim / 2
+		).ToArray();
 		
-		this.grid[firstCoords].state = Cell.State.ToClear;
+		this.grid[firstCoords].State = CellState.ToClear;
+
+		while(this.Turn().Result == TurnState.Playing)
+			continue;
+	}
+
+	async Task<TurnState> Turn() {
+		if(!this.knownCells[CellState.ToClear].Any()) {
+			Cell guessCell = this.GetGuessCell();
+
+			if(guessCell == null)
+				return TurnState.GiveUp;
+			
+			guessCell.State = CellState.ToClear;
+		}
+
+		var toClear = (
+			from cell in this.knownCells[CellState.ToClear]
+			select cell.Coords
+		).ToArray();
+
+		var toFlag = (
+			from cell in this.knownCells[CellState.ToClear]
+			select cell.Coords
+		).ToArray();
+
+		var resp = await this.server.Turn(clear: toClear, flag: toFlag,
+			unflag: null, client: Client.clientName);
+
+		if(resp.gameOver)
+			return TurnState.Finished;
+
+		foreach(var cellInfo in resp.clearActual) {
+			var cell = this.grid[cellInfo.coords];
+
+			switch(cellInfo.state) {
+				case ServerResponse.CellState.cleared:
+					cell.State = CellState.Empty;
+					break;
+				case ServerResponse.CellState.mine:
+					cell.State = CellState.Mine;
+					break;
+			}
+
+			//TODO: cell surround counts
+		}
+
+
+		return TurnState.Playing;
 	}
 
 	public void AddKnownCell(Cell cell) {
 		foreach(var d in this.knownCells) {
-			if(cell.state == d.Key) {
+			if(cell.State == d.Key) {
 				d.Value.Add(cell);
 			} else {
 				d.Value.Remove(cell);
@@ -67,24 +122,25 @@ class Client {
 }
 
 class Cell {
-	public enum State { Unknown, ToClear, Empty, Mine };
-
 	Client client;
 
-	private State _state;
-	public State state {
-		get { return this._state; }
+	public int[] Coords;
+
+	private CellState state;
+	public CellState State {
+		get { return this.state; }
 		set {
-			if(this._state == value)
+			if(this.state == value)
 				return;
 
-			this._state = value;
+			this.state = value;
 			this.client.AddKnownCell(this);
 		}
 	}
 
 	public Cell(int[] coords, Client client) {
-		this._state = State.Unknown;
+		this.state = CellState.Unknown;
 		this.client = client;
+		this.Coords = coords;
 	}
 }

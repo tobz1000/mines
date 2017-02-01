@@ -6,7 +6,8 @@ using Newtonsoft.Json.Converters;
 
 interface IMinesServer {
 	ServerResponse status { get; }
-	Task<ServerResponse> Turn(int[] clear, int[] flag, int[] unflag);
+	Task<ServerResponse> Turn(int[][] clear, int[][] flag, int[][] unflag,
+		string client);
 }
 
 class JsonServerWrapper : IMinesServer {
@@ -29,10 +30,12 @@ class JsonServerWrapper : IMinesServer {
 		return inst;
 	}
 
-	public Task<ServerResponse> Turn(int[] clear = null, int[] flag = null,
-		int[] unflag = null) {
+	public Task<ServerResponse> Turn(int[][] clear = null, int[][] flag = null,
+		int[][] unflag = null, string client = null) {
 		if(clear == null && flag == null && unflag == null)
 			throw new ArgumentNullException();
+
+		this.client = client ?? this.client;
 
 		var req = new TurnRequest { id = this.status.id, client = this.client,
 			clear = clear, flag = flag, unflag = unflag };
@@ -60,21 +63,17 @@ abstract class ServerRequest {
 
 class TurnRequest : ServerRequest {
 	[JsonIgnoreAttribute]
-	public override string action {
-		get { return "turn"; }
-	}
+	public override string action => "turn";
 	public string id;
 	public string client;
-	public int[] clear;
-	public int[] flag;
-	public int[] unflag;
+	public int[][] clear;
+	public int[][] flag;
+	public int[][] unflag;
 }
 
 class NewGame : ServerRequest {
 	[JsonIgnoreAttribute]
-	public override string action {
-		get { return "new"; }
-	}
+	public override string action => "new";
 	public int[] dims;
 	public int mines;
 	public string client;
@@ -82,9 +81,7 @@ class NewGame : ServerRequest {
 
 class StatusRequest : ServerRequest {
 	[JsonIgnoreAttribute]
-	public override string action {
-		get { return "status"; }
-	}
+	public override string action => "status";
 	public string id;
 }
 
@@ -93,7 +90,7 @@ public class ServerResponse {
 	public class CellInfo {
 		public int surrounding;
 		[JsonConverter(typeof(StringEnumConverter))]
-		public CellState state; //TODO - enum?
+		public CellState state;
 		public int[] coords;
 	}
 	public string id;
@@ -103,9 +100,9 @@ public class ServerResponse {
 	public bool gameOver;
 	public bool win;
 	public int cellsRem;
-	public int[,] flagged;
-	public int[,] unflagged;
+	public int[][] flagged;
+	public int[][] unflagged;
 	public CellInfo[] clearActual;
-	public int[,] clearReq;
+	public int[][] clearReq;
 	public DateTime turnTakenAt;
 }
