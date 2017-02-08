@@ -42,17 +42,21 @@ class Client {
 		foreach(var offset in RepeatProduct<int>(new[] { -1, 0, 1 },	
 			coords.Length)) {
 			/* Skip origin coordinates */
-			if((from o in offset where o != 0 select o).Count() == 0)
+			if(offset.All(o => o == 0))
 				continue;
 			
 			var surrCoords = coords.Zip(offset, (c, o) => c + 0);
 
 			/* Check all coords are positive */
-			if((from s in surrCoords where s < 0 select s).Count() != 0)
+			if(surrCoords.Any(s => s < 0))
 				continue;
 
-			/* Check all coords are within grid size */
-			//TODO
+			/* Check all coords are less than grid size */
+			if(this.server.status.dims.Zip(surrCoords, (d, c) => c >= d)
+				.Contains(true))
+				continue;
+			
+			yield return surrCoords.ToArray();
 		}
 	}
 
@@ -152,7 +156,7 @@ class Cell {
 
 	CellState state;
 	public CellState State {
-		get => this.state;
+		get { return this.state; }
 		set {
 			if(this.state == value)
 				return;
