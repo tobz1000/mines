@@ -3,6 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using static Product;
+
 enum CellState { Unknown, ToClear, Empty, Mine };
 
 class GameGrid {
@@ -30,11 +32,29 @@ class Client {
 
 	static string clientName = "CSClient";
 
-	GameGrid grid;
+	public GameGrid grid;
 	Dictionary<CellState, HashSet<Cell>> knownCells;
 	IMinesServer server;
 
 	protected virtual Cell GetGuessCell() => null;
+
+	public IEnumerable<int[]> SurroundingCoords(int[] coords) {
+		foreach(var offset in RepeatProduct<int>(new[] { -1, 0, 1 },	
+			coords.Length)) {
+			/* Skip origin coordinates */
+			if((from o in offset where o != 0 select o).Count() == 0)
+				continue;
+			
+			var surrCoords = coords.Zip(offset, (c, o) => c + 0);
+
+			/* Check all coords are positive */
+			if((from s in surrCoords where s < 0 select s).Count() != 0)
+				continue;
+
+			/* Check all coords are within grid size */
+			//TODO
+		}
+	}
 
 	public Client(IMinesServer server) {
 		this.server = server;
@@ -74,7 +94,7 @@ class Client {
 		).ToArray();
 
 		var toFlag = (
-			from cell in this.knownCells[CellState.ToClear]
+			from cell in this.knownCells[CellState.Mine]
 			select cell.Coords
 		).ToArray();
 
@@ -97,6 +117,10 @@ class Client {
 			}
 
 			//TODO: cell surround counts
+			if(cellInfo.surrounding > 0) {
+				cell.UnknownSurroundCountMine += cellInfo.surrounding;
+				cell.UnknownSurroundCountEmpty -= cellInfo.surrounding;
+			}
 		}
 
 
@@ -124,11 +148,11 @@ class Client {
 class Cell {
 	Client client;
 
-	public int[] Coords;
+	public int[] Coords { get; private set; }
 
-	private CellState state;
+	CellState state;
 	public CellState State {
-		get { return this.state; }
+		get => this.state;
 		set {
 			if(this.state == value)
 				return;
@@ -138,7 +162,17 @@ class Cell {
 		}
 	}
 
+	Lazy<HashSet<Cell>> surrCells;
+	public HashSet<Cell> SurrCells => this.surrCells.Value;
+
 	public Cell(int[] coords, Client client) {
+		this.surrCells = new Lazy<HashSet<Cell>>(() => 
+			new HashSet<Cell>(
+				from surrCoords in this.client.SurroundingCoords(this.Coords)
+				select this.client.grid[surrCoords]
+			)
+		);
+
 		this.state = CellState.Unknown;
 		this.client = client;
 		this.Coords = coords;
