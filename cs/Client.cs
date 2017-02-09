@@ -163,22 +163,71 @@ class Cell {
 
 			this.state = value;
 			this.client.AddKnownCell(this);
+
+			if(value == CellState.Mine) {
+				foreach(var cell in this.SurrCells)
+					cell.UnknownSurroundCountMine -= 1;
+			} else if (value == CellState.Empty) {
+				foreach(var cell in this.SurrCells)
+					cell.UnknownSurroundCountEmpty -= 1;
+			}
 		}
 	}
 
 	Lazy<HashSet<Cell>> surrCells;
 	public HashSet<Cell> SurrCells => this.surrCells.Value;
 
-	public Cell(int[] coords, Client client) {
-		this.surrCells = new Lazy<HashSet<Cell>>(() => 
-			new HashSet<Cell>(
-				from surrCoords in this.client.SurroundingCoords(this.Coords)
-				select this.client.grid[surrCoords]
-			)
-		);
+	int unknownSurroundCountMine;
+	public int UnknownSurroundCountMine {
+		get { return this.unknownSurroundCountMine; }
+		set {
+			if(value == 0 && this.State == CellState.Empty) {
+				foreach(var cell in this.SurrCells) {
+					if(cell.State == CellState.Unknown) {
+						cell.State = CellState.ToClear;
+					}
+				}
+			}
 
+			this.unknownSurroundCountMine = value;
+		}
+	}
+
+	int? unknownSurroundCountEmpty;
+	public int UnknownSurroundCountEmpty {
+		get {
+			if(this.unknownSurroundCountEmpty == null) {
+				this.unknownSurroundCountEmpty = this.SurrCells.Count();
+			}
+
+			return this.unknownSurroundCountEmpty.Value;
+		}
+		set {
+			if(value == 0) {
+				foreach(var cell in this.SurrCells) {
+					if(cell.State == CellState.Unknown) {
+						cell.State = CellState.Mine;
+					}
+				}
+			}
+
+			this.unknownSurroundCountEmpty = value;
+		}
+	}
+
+	//TODO
+	public ?? SharedUnknSurrCounts;
+
+	public Cell(int[] coords, Client client) {
 		this.state = CellState.Unknown;
 		this.client = client;
 		this.Coords = coords;
+
+		this.surrCells = new Lazy<HashSet<Cell>>(() => new HashSet<Cell>(
+			from surrCoords in this.client.SurroundingCoords(this.Coords)
+			select this.client.grid[surrCoords]
+		));
+
+		this.unknownSurroundCountMine = 0;
 	}
 }
