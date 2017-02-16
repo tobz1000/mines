@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 interface IMinesServer {
-	ServerResponse status { get; }
+	ServerResponse Status { get; }
 	Task<ServerResponse> Turn(int[][] clear, int[][] flag, int[][] unflag,
 		string client);
 }
@@ -13,7 +13,7 @@ interface IMinesServer {
 class JsonServerWrapper : IMinesServer {
 	string url = "http://localhost:1066/server/";
 	string client;
-	public ServerResponse status { get; private set; }
+	public ServerResponse Status { get; private set; }
 
 	public static async Task<JsonServerWrapper> JoinGame(string id,
 		string client) {
@@ -37,7 +37,7 @@ class JsonServerWrapper : IMinesServer {
 
 		this.client = client ?? this.client;
 
-		var req = new TurnRequest { id = this.status.id, client = this.client,
+		var req = new TurnRequest { id = this.Status.id, client = this.client,
 			clear = clear, flag = flag, unflag = unflag };
 
 		return this.Action(req);
@@ -49,10 +49,10 @@ class JsonServerWrapper : IMinesServer {
 				new StringContent(JsonConvert.SerializeObject(req)));
 			var respStr = await resp.Content.ReadAsStringAsync();
 
-			this.status = JsonConvert.DeserializeObject<ServerResponse>(
+			this.Status = JsonConvert.DeserializeObject<ServerResponse>(
 				respStr);
 
-			return this.status;
+			return this.Status;
 		}
 	}
 }
@@ -94,7 +94,7 @@ public class ServerResponse {
 		public int[] coords;
 	}
 	public string id;
-	public int[] dims;
+	public int[] Dims;
 	public int mines;
 	public int turnNum;
 	public bool gameOver;

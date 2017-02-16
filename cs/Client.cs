@@ -8,61 +8,86 @@ using static Itertools;
 enum CellState { Unknown, ToClear, Empty, Mine };
 
 class GameGrid {
-    Client client;
-	Dictionary<int[], Cell> dict;
+	Client client;
+	int[] dims;
+	Cell[] arr;
 
-	public Cell this[int[] i] {
+	public Cell this[int[] coords] {
 		get {
-			if(!this.dict.ContainsKey(i)) {
-				this.dict[i] = new Cell(i, this.client);
+			var index = 0;
+
+			for(int i = 0; i < coords.Length; i++) {
+				index *= this.dims[i];
+				index += coords[i];
 			}
 
-			return this.dict[i];
+			if(this.arr[index] == null) {
+				this.arr[index] = new Cell(coords, this.client);
+			}
+
+			return this.arr[index];
 		}
 	}
 
-	public GameGrid(Client client) {
+	public GameGrid(Client client, int[] dims) {
 		this.client = client;
-		this.dict = new Dictionary<int[], Cell>();
+		this.dims = dims;
+		this.arr = new Cell[dims.Aggregate((a, b) => a * b)];
 	}
 }
 
 class Client {
 	enum TurnState { Playing, Finished, GiveUp };
 
-	static string clientName = "CSClient";
+	static string ClientName = "CSClient";
 
-	public GameGrid grid;
+	Random random;
+
+	public GameGrid Grid;
 	Dictionary<CellState, HashSet<Cell>> knownCells;
-	IMinesServer server;
+	IMinesServer Server;
 
-	protected virtual Cell GetGuessCell() => null;
+	protected virtual Cell GetGuessCell() {
+		Cell cell;
+
+		do {
+			cell = this.Grid[this.randomCoords()];
+		} while(cell.State != CellState.Unknown);
+
+		return cell;
+	}
+
+	int[] randomCoords() {
+		return (from c in this.Server.Status.Dims select this.random.Next(c))
+			.ToArray();
+	}
 
 	public IEnumerable<int[]> SurroundingCoords(int[] coords) {
-		foreach(var offset in RepeatProduct<int>(new[] { -1, 0, 1 },	
+		foreach(var offset in RepeatProduct<int>(new[] { -1, 0, 1 },
 			coords.Length)) {
 			/* Skip origin coordinates */
 			if(offset.All(o => o == 0))
 				continue;
-			
-			var surrCoords = coords.Zip(offset, (c, o) => c + 0);
+
+			var surrCoords = coords.Zip(offset, (c, o) => c + o);
 
 			/* Check all coords are positive */
 			if(surrCoords.Any(s => s < 0))
 				continue;
 
 			/* Check all coords are less than grid size */
-			if(this.server.status.dims.Zip(surrCoords, (d, c) => c >= d)
+			if(this.Server.Status.Dims.Zip(surrCoords, (d, c) => c >= d)
 				.Contains(true))
 				continue;
-			
+
 			yield return surrCoords.ToArray();
 		}
 	}
 
 	public Client(IMinesServer server) {
-		this.server = server;
-		this.grid = new GameGrid(this);
+		this.random = new Random();
+		this.Server = server;
+		this.Grid = new GameGrid(this, server.Status.Dims);
 		this.knownCells = new Dictionary<CellState, HashSet<Cell>>() {
 			{ CellState.ToClear, new HashSet<Cell>() },
 			{ CellState.Empty, new HashSet<Cell>() },
@@ -72,11 +97,11 @@ class Client {
 
 	void Play() {
 		var firstCoords =(
-			from dim in this.server.status.dims
+			from dim in this.Server.Status.Dims
 			select dim / 2
 		).ToArray();
-		
-		this.grid[firstCoords].State = CellState.ToClear;
+
+		this.Grid[firstCoords].State = CellState.ToClear;
 
 		while(this.Turn().Result == TurnState.Playing)
 			continue;
@@ -88,7 +113,7 @@ class Client {
 
 			if(guessCell == null)
 				return TurnState.GiveUp;
-			
+
 			guessCell.State = CellState.ToClear;
 		}
 
@@ -102,14 +127,14 @@ class Client {
 			select cell.Coords
 		).ToArray();
 
-		var resp = await this.server.Turn(clear: toClear, flag: toFlag,
-			unflag: null, client: Client.clientName);
+		var resp = await this.Server.Turn(clear: toClear, flag: toFlag,
+			unflag: null, client: Client.ClientName);
 
 		if(resp.gameOver)
 			return TurnState.Finished;
 
 		foreach(var cellInfo in resp.clearActual) {
-			var cell = this.grid[cellInfo.coords];
+			var cell = this.Grid[cellInfo.coords];
 
 			switch(cellInfo.state) {
 				case ServerResponse.CellState.cleared:
@@ -141,10 +166,12 @@ class Client {
 	}
 
 	public static void Main() {
-		var server = JsonServerWrapper.NewGame(new int[] { 11, 11 }, 11,
-			Client.clientName).Result;
+		foreach(var _ in new int[5]) {
+			var server = JsonServerWrapper.NewGame(new int[] { 15, 15 }, 40,
+				Client.ClientName).Result;
 
-		new Client(server).Play();
+			new Client(server).Play();
+		}
 	}
 }
 
@@ -173,6 +200,8 @@ class Cell {
 		}
 	}
 
+	IEnumerable<int[]> surrCoords;
+
 	Lazy<HashSet<Cell>> surrCells;
 	public HashSet<Cell> SurrCells => this.surrCells.Value;
 
@@ -196,7 +225,7 @@ class Cell {
 	public int UnknownSurroundCountEmpty {
 		get {
 			if(this.unknownSurroundCountEmpty == null) {
-				this.unknownSurroundCountEmpty = this.SurrCells.Count();
+				this.unknownSurroundCountEmpty = this.surrCoords.Count();
 			}
 
 			return this.unknownSurroundCountEmpty.Value;
@@ -218,10 +247,10 @@ class Cell {
 		this.state = CellState.Unknown;
 		this.client = client;
 		this.Coords = coords;
+		this.surrCoords = this.client.SurroundingCoords(this.Coords);
 
 		this.surrCells = new Lazy<HashSet<Cell>>(() => new HashSet<Cell>(
-			from surrCoords in this.client.SurroundingCoords(this.Coords)
-			select this.client.grid[surrCoords]
+			from c in this.surrCoords select this.client.Grid[c]
 		));
 
 		this.unknownSurroundCountMine = 0;
