@@ -3,7 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-using static Product;
+using static Itertools;
 
 enum CellState { Unknown, ToClear, Empty, Mine };
 
@@ -120,7 +120,6 @@ class Client {
 					break;
 			}
 
-			//TODO: cell surround counts
 			if(cellInfo.surrounding > 0) {
 				cell.UnknownSurroundCountMine += cellInfo.surrounding;
 				cell.UnknownSurroundCountEmpty -= cellInfo.surrounding;
@@ -214,9 +213,6 @@ class Cell {
 			this.unknownSurroundCountEmpty = value;
 		}
 	}
-
-	//TODO
-	public ?? SharedUnknSurrCounts;
 
 	public Cell(int[] coords, Client client) {
 		this.state = CellState.Unknown;
