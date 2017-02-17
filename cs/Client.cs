@@ -39,7 +39,7 @@ class GameGrid {
 class Client {
 	enum TurnState { Playing, Finished, GiveUp };
 
-	static string ClientName = "CSClient";
+	public virtual string ClientName => "CSClient";
 
 	Random random;
 
@@ -47,17 +47,9 @@ class Client {
 	Dictionary<CellState, HashSet<Cell>> knownCells;
 	IMinesServer Server;
 
-	protected virtual Cell GetGuessCell() {
-		Cell cell;
+	protected virtual Cell getGuessCell() => null;
 
-		do {
-			cell = this.Grid[this.randomCoords()];
-		} while(cell.State != CellState.Unknown);
-
-		return cell;
-	}
-
-	int[] randomCoords() {
+	protected int[] randomCoords() {
 		return (from c in this.Server.Status.Dims select this.random.Next(c))
 			.ToArray();
 	}
@@ -109,7 +101,7 @@ class Client {
 
 	async Task<TurnState> Turn() {
 		if(!this.knownCells[CellState.ToClear].Any()) {
-			Cell guessCell = this.GetGuessCell();
+			Cell guessCell = this.getGuessCell();
 
 			if(guessCell == null)
 				return TurnState.GiveUp;
@@ -128,7 +120,7 @@ class Client {
 		).ToArray();
 
 		var resp = await this.Server.Turn(clear: toClear, flag: toFlag,
-			unflag: null, client: Client.ClientName);
+			unflag: null, client: this.ClientName);
 
 		if(resp.gameOver)
 			return TurnState.Finished;
@@ -168,10 +160,26 @@ class Client {
 	public static void Main() {
 		foreach(var _ in new int[5]) {
 			var server = JsonServerWrapper.NewGame(new int[] { 15, 15 }, 40,
-				Client.ClientName).Result;
+				null).Result;
 
 			new Client(server).Play();
 		}
+	}
+}
+
+class GuessClient : Client {
+	public GuessClient(IMinesServer server) : base(server) {}
+
+	public override string ClientName => "CSGuessClient";
+
+	protected override Cell getGuessCell() {
+		Cell cell;
+
+		do {
+			cell = this.Grid[this.randomCoords()];
+		} while(cell.State != CellState.Unknown);
+
+		return cell;
 	}
 }
 
