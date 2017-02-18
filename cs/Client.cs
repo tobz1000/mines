@@ -138,11 +138,33 @@ class Client {
 			}
 
 			if(cellInfo.surrounding > 0) {
-				cell.UnknownSurroundCountMine += cellInfo.surrounding;
-				cell.UnknownSurroundCountEmpty -= cellInfo.surrounding;
+				cell.UnknownSurrCountMine += cellInfo.surrounding;
+				cell.UnknownSurrCountEmpty -= cellInfo.surrounding;
 			}
 		}
+		
+		foreach(var cell in this.knownCells[CellState.Empty].ToList()) {
+			if(cell.SurroundingChanged == false)
+				continue;
 
+			cell.SurroundingChanged = false;
+
+			if(cell.UnknownSurrCountEmpty == 0 &&
+				cell.UnknownSurrCountMine == 0)
+				continue;
+			
+			foreach(var other in cell.SurrCells) {
+				if(cell.ExclusiveCellsEmpty(other)) {
+					foreach(var surr in cell.ExclusiveUnknownSurrCells(other)) {
+						surr.State = CellState.Empty;
+					}
+
+					foreach(var surr in other.ExclusiveUnknownSurrCells(cell)) {
+						surr.State = CellState.Mine;
+					}
+				}
+			}
+		}
 
 		return TurnState.Playing;
 	}
@@ -158,7 +180,7 @@ class Client {
 	}
 
 	public static void Main() {
-		foreach(var _ in new int[5]) {
+		foreach(var _ in new int[15]) {
 			var server = JsonServerWrapper.NewGame(new int[] { 15, 15 }, 40,
 				null).Result;
 
@@ -188,6 +210,8 @@ class Cell {
 
 	public int[] Coords { get; private set; }
 
+	public bool SurroundingChanged;
+
 	CellState state;
 	public CellState State {
 		get { return this.state; }
@@ -198,14 +222,28 @@ class Cell {
 			this.state = value;
 			this.client.AddKnownCell(this);
 
-			if(value == CellState.Mine) {
-				foreach(var cell in this.SurrCells)
-					cell.UnknownSurroundCountMine -= 1;
-			} else if (value == CellState.Empty) {
-				foreach(var cell in this.SurrCells)
-					cell.UnknownSurroundCountEmpty -= 1;
+			foreach(var cell in this.SurrCells) {
+				cell.SurroundingChanged = true;
+
+				if(value == CellState.Mine)
+					cell.UnknownSurrCountMine -= 1;
+				else if(value == CellState.Empty)
+					cell.UnknownSurrCountEmpty -= 1;
 			}
 		}
+	}
+
+	public HashSet<Cell> ExclusiveUnknownSurrCells(Cell other) {
+		return new HashSet<Cell>(this.SurrCells.Except(other.SurrCells)
+			.Where(c => c.State == CellState.Unknown));
+	}
+
+	public bool ExclusiveCellsEmpty(Cell other) {
+		return
+			this.UnknownSurrCountEmpty >
+				this.ExclusiveUnknownSurrCells(other).Count() &&
+			other.unknownSurrCountMine >
+				other.ExclusiveUnknownSurrCells(this).Count();
 	}
 
 	IEnumerable<int[]> surrCoords;
@@ -213,9 +251,9 @@ class Cell {
 	Lazy<HashSet<Cell>> surrCells;
 	public HashSet<Cell> SurrCells => this.surrCells.Value;
 
-	int unknownSurroundCountMine;
-	public int UnknownSurroundCountMine {
-		get { return this.unknownSurroundCountMine; }
+	int unknownSurrCountMine;
+	public int UnknownSurrCountMine {
+		get { return this.unknownSurrCountMine; }
 		set {
 			if(value == 0 && this.State == CellState.Empty) {
 				foreach(var cell in this.SurrCells) {
@@ -225,18 +263,18 @@ class Cell {
 				}
 			}
 
-			this.unknownSurroundCountMine = value;
+			this.unknownSurrCountMine = value;
 		}
 	}
 
-	int? unknownSurroundCountEmpty;
-	public int UnknownSurroundCountEmpty {
+	int? unknownSurrCountEmpty;
+	public int UnknownSurrCountEmpty {
 		get {
-			if(this.unknownSurroundCountEmpty == null) {
-				this.unknownSurroundCountEmpty = this.surrCoords.Count();
+			if(this.unknownSurrCountEmpty == null) {
+				this.unknownSurrCountEmpty = this.surrCoords.Count();
 			}
 
-			return this.unknownSurroundCountEmpty.Value;
+			return this.unknownSurrCountEmpty.Value;
 		}
 		set {
 			if(value == 0) {
@@ -247,7 +285,7 @@ class Cell {
 				}
 			}
 
-			this.unknownSurroundCountEmpty = value;
+			this.unknownSurrCountEmpty = value;
 		}
 	}
 
@@ -261,6 +299,8 @@ class Cell {
 			from c in this.surrCoords select this.client.Grid[c]
 		));
 
-		this.unknownSurroundCountMine = 0;
+		this.unknownSurrCountMine = 0;
+
+		this.SurroundingChanged = true;
 	}
 }
