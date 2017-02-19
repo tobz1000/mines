@@ -156,7 +156,7 @@ class Client {
 			foreach(var other in cell.SurrCells) {
 				if(cell.ExclusiveCellsEmpty(other)) {
 					foreach(var surr in cell.ExclusiveUnknownSurrCells(other)) {
-						surr.State = CellState.Empty;
+						surr.State = CellState.ToClear;
 					}
 
 					foreach(var surr in other.ExclusiveUnknownSurrCells(cell)) {
