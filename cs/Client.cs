@@ -199,11 +199,11 @@ class Client {
 	}
 
 	public static void Main() {
-		foreach(var _ in new int[15]) {
+		foreach(var _ in new int[10]) {
 			var server = JsonServerWrapper.NewGame(new int[] { 15, 15 }, 40,
 				null).Result;
 
-			new Client(server).Play();
+			new GuessClient(server).Play();
 		}
 	}
 }
@@ -263,7 +263,7 @@ class Cell {
 		return
 			this.UnknownSurrCountEmpty >
 				this.ExclusiveUnknownSurrCells(other).Count() &&
-			other.unknownSurrCountMine >
+			other.UnknownSurrCountMine >
 				other.ExclusiveUnknownSurrCells(this).Count();
 	}
 
