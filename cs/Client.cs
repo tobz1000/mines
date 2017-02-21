@@ -101,6 +101,10 @@ class Client {
 
 	async Task<TurnState> Turn() {
 		if(!this.knownCells[CellState.ToClear].Any()) {
+			this.checkExclusiveCellsEmpty();
+		}
+
+		if(!this.knownCells[CellState.ToClear].Any()) {
 			Cell guessCell = this.getGuessCell();
 
 			if(guessCell == null)
@@ -142,8 +146,12 @@ class Client {
 				cell.UnknownSurrCountEmpty -= cellInfo.surrounding;
 			}
 		}
-		
-		foreach(var cell in this.knownCells[CellState.Empty].ToList()) {
+
+		return TurnState.Playing;
+	}
+
+	void checkExclusiveCellsEmpty() {
+		foreach(var cell in this.knownCells[CellState.Empty]) {
 			if(cell.SurroundingChanged == false)
 				continue;
 
@@ -184,8 +192,6 @@ class Client {
 				}
 			}
 		}
-
-		return TurnState.Playing;
 	}
 
 	public void AddKnownCell(Cell cell) {
