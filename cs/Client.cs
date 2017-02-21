@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 using static Itertools;
 
-enum CellState { Unknown, ToClear, Empty, Mine };
+enum CellState { Unknown, Empty, Mine };
 
 class GameGrid {
 	Client client;
@@ -45,6 +45,7 @@ class Client {
 
 	public GameGrid Grid;
 	Dictionary<CellState, HashSet<Cell>> knownCells;
+	HashSet<Cell> toClearCells;
 	IMinesServer Server;
 
 	protected virtual Cell getGuessCell() => null;
@@ -81,10 +82,10 @@ class Client {
 		this.Server = server;
 		this.Grid = new GameGrid(this, server.Status.Dims);
 		this.knownCells = new Dictionary<CellState, HashSet<Cell>>() {
-			{ CellState.ToClear, new HashSet<Cell>() },
 			{ CellState.Empty, new HashSet<Cell>() },
 			{ CellState.Mine, new HashSet<Cell>() },
 		};
+		this.toClearCells = new HashSet<Cell>();
 	}
 
 	void Play() {
@@ -93,24 +94,24 @@ class Client {
 			select dim / 2
 		).ToArray();
 
-		this.Grid[firstCoords].State = CellState.ToClear;
+		this.AddToClear(this.Grid[firstCoords]);
 
 		while(this.Turn().Result == TurnState.Playing)
 			continue;
 	}
 
 	async Task<TurnState> Turn() {
-		if(!this.knownCells[CellState.ToClear].Any()) {
+		if(!this.toClearCells.Any()) {
 			Cell guessCell = this.getGuessCell();
 
 			if(guessCell == null)
 				return TurnState.GiveUp;
 
-			guessCell.State = CellState.ToClear;
+			this.AddToClear(guessCell);
 		}
 
 		var toClear = (
-			from cell in this.knownCells[CellState.ToClear]
+			from cell in this.toClearCells
 			select cell.Coords
 		).ToArray();
 
@@ -121,6 +122,8 @@ class Client {
 
 		var resp = await this.Server.Turn(clear: toClear, flag: toFlag,
 			unflag: null, client: this.ClientName);
+
+		this.toClearCells.Clear();
 
 		if(resp.gameOver)
 			return TurnState.Finished;
@@ -171,7 +174,7 @@ class Client {
 					Console.Write("Clear:");
 					foreach(var surr in cell.ExclusiveUnknownSurrCells(other)) {
 						Console.Write(surr);
-						surr.State = CellState.ToClear;
+						this.AddToClear(surr);
 					}
 					Console.WriteLine();
 
@@ -186,6 +189,11 @@ class Client {
 		}
 
 		return TurnState.Playing;
+	}
+
+	public void AddToClear(Cell cell) {
+		cell.State = CellState.Empty;
+		this.toClearCells.Add(cell);
 	}
 
 	public void AddKnownCell(Cell cell) {
@@ -279,7 +287,7 @@ class Cell {
 			if(value == 0 && this.State == CellState.Empty) {
 				foreach(var cell in this.SurrCells) {
 					if(cell.State == CellState.Unknown) {
-						cell.State = CellState.ToClear;
+						this.client.AddToClear(cell);
 					}
 				}
 			}
