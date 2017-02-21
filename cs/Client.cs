@@ -155,13 +155,32 @@ class Client {
 			
 			foreach(var other in cell.SurrCells) {
 				if(cell.ExclusiveCellsEmpty(other)) {
+					string describeCell(Cell _cell) {
+						return _cell + ":"
+							+ "\n  UnkEmpt: " + _cell.UnknownSurrCountEmpty
+							+ "\n  UnkMine: " + _cell.UnknownSurrCountMine
+							+ "\n  UnkSurr: " + string.Join(",",
+								_cell.SurrCells.Where(c =>
+									c.State == CellState.Unknown));
+					}
+					var turnNum = this.Server.Status.turnNum;
+					Console.WriteLine("Turn " + turnNum + " Excl: ");
+					Console.WriteLine("In " + describeCell(cell));
+					Console.WriteLine("Not in " + describeCell(other));
+
+					Console.Write("Clear:");
 					foreach(var surr in cell.ExclusiveUnknownSurrCells(other)) {
+						Console.Write(surr);
 						surr.State = CellState.ToClear;
 					}
+					Console.WriteLine();
 
+					Console.Write("Flag:");
 					foreach(var surr in other.ExclusiveUnknownSurrCells(cell)) {
+						Console.Write(surr);
 						surr.State = CellState.Mine;
 					}
+					Console.WriteLine();
 				}
 			}
 		}
@@ -232,6 +251,8 @@ class Cell {
 			}
 		}
 	}
+
+	public override string ToString() => "[" + string.Join(",", this.Coords) + "]";
 
 	public HashSet<Cell> ExclusiveUnknownSurrCells(Cell other) {
 		return new HashSet<Cell>(this.SurrCells.Except(other.SurrCells)
