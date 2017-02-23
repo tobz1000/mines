@@ -23,10 +23,10 @@ class JsonServerWrapper : IMinesServer {
 	}
 
 	public static async Task<JsonServerWrapper> NewGame(int[] dims, int mines,
-		string client) {
+		uint? seed = null, string client = null) {
 		var inst = new JsonServerWrapper { client = client };
 		await inst.Action(new NewGame { dims = dims, mines = mines,
-			client = client });
+			client = client, seed = seed });
 		return inst;
 	}
 
@@ -74,6 +74,7 @@ class TurnRequest : ServerRequest {
 class NewGame : ServerRequest {
 	[JsonIgnoreAttribute]
 	public override string action => "new";
+	public uint? seed;
 	public int[] dims;
 	public int mines;
 	public string client;
@@ -94,6 +95,7 @@ public class ServerResponse {
 		public int[] coords;
 	}
 	public string id;
+	public uint seed;
 	public int[] Dims;
 	public int mines;
 	public int turnNum;
