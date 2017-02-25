@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 using static Itertools;
 
@@ -76,8 +77,8 @@ class Client {
 		}
 	}
 
-	public Client(IMinesServer server) {
-		this.random = new Random();
+	public Client(IMinesServer server, bool debug = false) {
+		this.random = new Random(0);
 		this.Server = server;
 		this.Grid = new GameGrid(this, server.Status.Dims);
 		this.knownCells = new Dictionary<CellState, HashSet<Cell>>() {
@@ -205,17 +206,17 @@ class Client {
 	}
 
 	public static void Main() {
-		foreach(var _ in new int[10]) {
-			var server = JsonServerWrapper.NewGame(new int[] { 15, 15 }, 40,
-				null).Result;
+		foreach(var _ in new int[20]) {
+			var server = JsonServerWrapper.NewGame(dims: new[]{ 15, 15 },
+				mines: 50).Result;
 
-			new GuessClient(server).Play();
+			new GuessClient(server, debug : true).Play();
 		}
 	}
 }
 
 class GuessClient : Client {
-	public GuessClient(IMinesServer server) : base(server) {}
+	public GuessClient(IMinesServer server, bool debug) : base(server, debug) {}
 
 	public override string ClientName => "CSGuessClient";
 
