@@ -206,9 +206,9 @@ class Client {
 	}
 
 	public static void Main() {
-		foreach(var _ in new int[20]) {
+		foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
 			var server = JsonServerWrapper.NewGame(dims: new[]{ 15, 15 },
-				mines: 50).Result;
+				mines: 50, seed: seed).Result;
 
 			new GuessClient(server, debug : true).Play();
 		}
