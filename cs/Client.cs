@@ -267,6 +267,7 @@ class Cell {
 	}
 
 	public bool ExclusiveCellsEmpty(Cell other) {
+		/* TODO: May return a false positive if other is a subset of this */
 		return
 			this.UnknownSurrCountEmpty >
 				this.ExclusiveUnknownSurrCells(other).Count() &&
