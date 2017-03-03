@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
@@ -50,6 +51,8 @@ class Client {
 
 	protected virtual Cell getGuessCell() => null;
 
+	/* TODO: Abstract base class for Client & SetsClient which implements
+	randomCoords etc. */
 	protected int[] randomCoords() {
 		return (from c in this.Server.Status.Dims select this.random.Next(c))
 			.ToArray();
