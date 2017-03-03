@@ -18,7 +18,6 @@ class Client {
 	Random random;
 
 	public GameGrid Grid;
-	// Dictionary<Cell, HashSet<CellSet>> setLookup;
 	IMinesServer Server;
 	HashSet<Cell> toFlag;
 	HashSet<Cell> toClear;
@@ -35,7 +34,6 @@ class Client {
 		this.random = new Random(0);
 		this.Server = server;
 		this.Grid = new GameGrid(this, server.Status.Dims);
-		// this.setLookup = new Dictionary<Cell, HashSet<CellSet>>();
 		this.toFlag = new HashSet<Cell>();
 		this.toClear = new HashSet<Cell>();
 	}
@@ -126,7 +124,6 @@ class Client {
 			if(cellSet.SharedMineCount(otherSet) != null) {
 				foreach(var cell in otherSet.Cells) {
 					cell.IncludedSets.Remove(otherSet);
-					// this.setLookup[cell].Remove(otherSet);
 				}
 
 				this.addCellSet(otherSet - cellSet);
@@ -140,7 +137,6 @@ class Client {
 		if(addSet) {
 			foreach(var cell in cellSet.Cells) {
 				cell.IncludedSets.Add(cellSet);
-				// this.setLookup[cell].Append(cellSet);
 			}
 		}
 	}
@@ -207,11 +203,6 @@ class CellSet {
 			this.MineCount - (this.Cells.Count() - sharedCount),
 			other.MineCount - (other.Cells.Count() - sharedCount)
 		), 0);
-
-		// return (
-		// 	from cellSet in new[] { this, other }
-		// 	select cellSet.MineCount - (cellSet.Cells.Count() - sharedCount)
-		// ).Append(0).Max();
 	}
 
 	int maxSharedMines(CellSet other) {
@@ -222,11 +213,6 @@ class CellSet {
 		);
 
 		return sharedCount - Math.Max(minSharedEmpty, 0);
-
-		// return sharedCount - (
-		// 	from cellSet in new[] { this, other }
-		// 	select sharedCount - cellSet.MineCount
-		// ).Append(0).Max();
 	}
 }
 
