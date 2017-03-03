@@ -208,15 +208,6 @@ class Client {
 			}
 		}
 	}
-
-	public static void Main() {
-		foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
-			var server = JsonServerWrapper.NewGame(dims: new[]{ 15, 15 },
-				mines: 50, seed: seed).Result;
-
-			new GuessClient(server, debug : true).Play();
-		}
-	}
 }
 
 class GuessClient : Client {

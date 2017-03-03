@@ -166,7 +166,7 @@ class CellSet {
 
 
 	string toString;
-	public string ToString() => this.toString;
+	public override string ToString() => this.toString;
 
 	public CellSet(Cell cell, int mineCount)
 		: this(new[] { cell }, mineCount) {}
