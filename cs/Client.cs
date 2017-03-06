@@ -3,9 +3,10 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 
 using static Itertools;
+
+namespace Client {
 
 enum CellState { Unknown, ToClear, Empty, Mine };
 
@@ -335,4 +336,6 @@ class Cell {
 
 		this.SurroundingChanged = true;
 	}
+}
+
 }

@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 
 using static Itertools;
 
+namespace SetsClient {
+
 enum CellState { Unknown, Empty, Mine };
 
-class SetsClient {
+class Client {
 	enum TurnState { Playing, Finished, GiveUp };
 
 	public virtual string ClientName => "CSSets";
@@ -29,7 +31,7 @@ class SetsClient {
 			.ToArray();
 	}
 
-	public SetsClient(IMinesServer server) {
+	public Client(IMinesServer server) {
 		this.random = new Random(0);
 		this.Server = server;
 		this.Grid = new GameGrid(this, server.Status.Dims);
@@ -44,7 +46,7 @@ class SetsClient {
 			select dim / 2
 		).ToArray();
 
-		this.addCellSet(new CellSet(this.Grid[firstCoords], 0));
+		this.guessClear(this.Grid[firstCoords]);
 
 		while(this.Turn().Result == TurnState.Playing)
 			continue;
@@ -57,7 +59,7 @@ class SetsClient {
 			if(guessCell == null)
 				return TurnState.GiveUp;
 
-			this.addCellSet(new CellSet(guessCell, 0));
+			this.guessClear(guessCell);
 		}
 
 		var toClear = (from cell in this.toClear select cell.Coords).ToArray();
@@ -73,14 +75,13 @@ class SetsClient {
 			return TurnState.Finished;
 
 		foreach(var cellInfo in resp.clearActual) {
-			if(cellInfo.surrounding > 0) {
-				var cell = this.Grid[cellInfo.coords];
-				var unknownSurrounding = (cell.SurrCells.Value.Where(
-					c => c.State == CellState.Unknown));
+			var cell = this.Grid[cellInfo.coords];
+			var unknownSurrounding = (cell.SurrCells.Value.Where(
+				c => c.State == CellState.Unknown));
+			var cellSet = new CellSet(unknownSurrounding,
+				cellInfo.surrounding, toString: "~{" + cell + "}");
 
-				this.addCellSet(new CellSet(unknownSurrounding,
-					cellInfo.surrounding));
-			}
+			this.addCellSet(cellSet,addToTurn: false);
 		}
 
 		return TurnState.Playing;
@@ -92,7 +93,7 @@ class SetsClient {
 		select otherSet
 	);
 
-	void addCellSet(CellSet cellSet) {
+	void addCellSet(CellSet cellSet, bool addToTurn = true) {
 		bool addSet = true;
 		int cellCount = cellSet.Cells.Count();
 
@@ -104,7 +105,9 @@ class SetsClient {
 
 			foreach(var cell in cellSet.Cells) {
 				cell.State = CellState.Mine;
-				this.toFlag.Add(cell);
+
+				if(addToTurn)
+					this.toFlag.Add(cell);
 			}
 		}
 
@@ -113,7 +116,9 @@ class SetsClient {
 
 			foreach(var cell in cellSet.Cells) {
 				cell.State = CellState.Empty;
-				this.toClear.Add(cell);
+
+				if(addToTurn)
+					this.toClear.Add(cell);
 			}
 		}
 
@@ -140,12 +145,17 @@ class SetsClient {
 		}
 	}
 
+	void guessClear(Cell cell) {
+		this.addCellSet(new CellSet(cell, 0));
+	}
+
 	public static void Main() {
-		foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
+		// foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
+		foreach(var seed in new uint[] { 1929672436 }) {
 			var server = JsonServerWrapper.NewGame(dims: new[]{ 15, 15 },
 				mines: 50, seed: seed).Result;
 
-			new SetsClient(server).Play();
+			new Client(server).Play();
 		}
 	}
 }
@@ -154,12 +164,18 @@ class CellSet {
 	public ImmutableHashSet<Cell> Cells { get; }
 	public int MineCount { get; }
 
+
+	string toString;
+	public string ToString() => this.toString;
+
 	public CellSet(Cell cell, int mineCount)
 		: this(new[] { cell }, mineCount) {}
 
-	public CellSet(IEnumerable<Cell> cells, int mineCount) {
+	public CellSet(IEnumerable<Cell> cells, int mineCount,
+		string toString = null) {
 		this.Cells = new HashSet<Cell>(cells).ToImmutableHashSet();
 		this.MineCount = mineCount;
+		this.toString = toString ?? "{" + string.Join(",", this.Cells) + "}";
 	}
 
 	public static CellSet operator -(CellSet c1, CellSet c2) {
@@ -215,11 +231,11 @@ class CellSet {
 }
 
 class GameGrid {
-	SetsClient client;
+	Client client;
 	int[] dims;
 	Cell[] arr;
 
-	public GameGrid(SetsClient client, int[] dims) {
+	public GameGrid(Client client, int[] dims) {
 		this.client = client;
 		this.dims = dims;
 		this.arr = new Cell[dims.Aggregate((a, b) => a * b)];
@@ -265,7 +281,7 @@ class GameGrid {
 }
 
 class Cell {
-	SetsClient client;
+	Client client;
 	public CellState State;
 	public int[] Coords { get; private set; }
 	public HashSet<CellSet> IncludedSets;
@@ -274,7 +290,7 @@ class Cell {
 	public override string ToString() =>
 		"[" + string.Join(",", this.Coords) + "]";
 
-	public Cell(int[] coords, SetsClient client) {
+	public Cell(int[] coords, Client client) {
 		this.State = CellState.Unknown;
 		this.client = client;
 		this.Coords = coords;
@@ -282,4 +298,6 @@ class Cell {
 		this.SurrCells = new Lazy<Cell[]>(() =>
 			this.client.Grid.SurroundingCells(this).ToArray());
 	}
+}
+
 }
