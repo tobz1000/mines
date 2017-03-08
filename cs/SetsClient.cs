@@ -77,7 +77,7 @@ class Client {
 			var unknownSurrounding = (cell.SurrCells.Value.Where(
 				c => c.State == CellState.Unknown));
 			var cellSet = new CellSet(unknownSurrounding,
-				cellInfo.surrounding, toString: "~{" + cell + "}");
+				cellInfo.surrounding, surrCell: cell);
 
 			this.addCellSet(cellSet,addToTurn: false);
 		}
@@ -159,19 +159,21 @@ class Client {
 class CellSet {
 	public ImmutableHashSet<Cell> Cells { get; }
 	public int MineCount { get; }
+	Cell surrCell;
 
-
-	string toString;
-	public override string ToString() => this.toString;
+	public override string ToString() {
+		return (this.surrCell != null ? "~" + this.surrCell + ":" : "") +
+			"{" + string.Join(",", this.Cells) + "}" + "m" + this.MineCount;
+	}
 
 	public CellSet(Cell cell, int mineCount)
 		: this(new[] { cell }, mineCount) {}
 
 	public CellSet(IEnumerable<Cell> cells, int mineCount,
-		string toString = null) {
+		Cell surrCell = null) {
 		this.Cells = new HashSet<Cell>(cells).ToImmutableHashSet();
 		this.MineCount = mineCount;
-		this.toString = toString ?? "{" + string.Join(",", this.Cells) + "}";
+		this.surrCell = surrCell;
 	}
 
 	public static CellSet operator -(CellSet c1, CellSet c2) {
@@ -190,8 +192,15 @@ class CellSet {
 
 	public int? SharedMineCount(CellSet other) {
 		int minShared = this.minSharedMines(other);
+		int maxShared = this.maxSharedMines(other);
 
-		if(minShared == this.maxSharedMines(other))
+		if(minShared > maxShared) {
+			throw new Exception("Impossible CellSet intersection: " + this +
+				", " + other + "; " + "minShared=" + minShared + " maxShared=" +
+				maxShared);
+		}
+
+		if(minShared == maxShared)
 			return minShared;
 		
 		return null;
