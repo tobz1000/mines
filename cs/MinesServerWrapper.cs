@@ -23,10 +23,10 @@ class JsonServerWrapper : IMinesServer {
 	}
 
 	public static async Task<JsonServerWrapper> NewGame(int[] dims, int mines,
-		uint? seed = null, string client = null) {
+		uint? seed = null, string client = null, bool? autoclear = null) {
 		var inst = new JsonServerWrapper { client = client };
 		await inst.Action(new NewGame { dims = dims, mines = mines,
-			client = client, seed = seed });
+			client = client, seed = seed, autoclear = autoclear });
 		return inst;
 	}
 
@@ -78,6 +78,7 @@ class NewGame : ServerRequest {
 	public int[] dims;
 	public int mines;
 	public string client;
+	public bool? autoclear;
 }
 
 class StatusRequest : ServerRequest {

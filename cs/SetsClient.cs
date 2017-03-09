@@ -149,7 +149,7 @@ class Client {
 		// foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
 		foreach(var seed in new uint[] { 1929672436 }) {
 			var server = JsonServerWrapper.NewGame(dims: new[] { 15, 15 },
-				mines: 50, seed: seed).Result;
+				mines: 50, seed: seed, autoclear: false).Result;
 
 			new Client(server).Play();
 		}
