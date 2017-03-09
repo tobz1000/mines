@@ -76,10 +76,10 @@ class Client {
 			var cell = this.Grid[cellInfo.coords];
 			var unknownSurrounding = (cell.SurrCells.Value.Where(
 				c => c.State == CellState.Unknown));
-			var cellSet = new CellSet(unknownSurrounding,
-				cellInfo.surrounding, surrCell: cell);
+			var cellSet = new CellSet(unknownSurrounding, cellInfo.surrounding,
+				originCell: cell);
 
-			this.addCellSet(cellSet,addToTurn: false);
+			this.addCellSet(cellSet, addToTurn: false);
 		}
 
 		return TurnState.Playing;
@@ -148,7 +148,7 @@ class Client {
 	public static void Main() {
 		// foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
 		foreach(var seed in new uint[] { 1929672436 }) {
-			var server = JsonServerWrapper.NewGame(dims: new[]{ 15, 15 },
+			var server = JsonServerWrapper.NewGame(dims: new[] { 15, 15 },
 				mines: 50, seed: seed).Result;
 
 			new Client(server).Play();
@@ -159,10 +159,11 @@ class Client {
 class CellSet {
 	public ImmutableHashSet<Cell> Cells { get; }
 	public int MineCount { get; }
-	Cell surrCell;
+	Cell originCell;
+	CellSet[] originCellSets;
 
 	public override string ToString() {
-		return (this.surrCell != null ? "~" + this.surrCell + ":" : "") +
+		return (this.originCell != null ? "~" + this.originCell + ":" : "") +
 			"{" + string.Join(",", this.Cells) + "}" + "m" + this.MineCount;
 	}
 
@@ -170,20 +171,23 @@ class CellSet {
 		: this(new[] { cell }, mineCount) {}
 
 	public CellSet(IEnumerable<Cell> cells, int mineCount,
-		Cell surrCell = null) {
+		Cell originCell = null, CellSet[] originCellSets = null) {
 		this.Cells = new HashSet<Cell>(cells).ToImmutableHashSet();
 		this.MineCount = mineCount;
-		this.surrCell = surrCell;
+		this.originCell = originCell;
+		this.originCellSets = originCellSets;
 	}
 
 	public static CellSet operator -(CellSet c1, CellSet c2) {
 		return new CellSet(c1.Cells.Except(c2.Cells),
-			c1.MineCount - c1.SharedMineCount(c2).Value);
+			c1.MineCount - c1.SharedMineCount(c2).Value,
+			originCellSets: new[] { c1, c2 });
 	}
 
 	public static CellSet operator &(CellSet c1, CellSet c2) {
 		return new CellSet(c1.Cells.Intersect(c2.Cells),
-			c1.SharedMineCount(c2).Value);
+			c1.SharedMineCount(c2).Value,
+			originCellSets: new[] { c1, c2 });
 	}
 
 	public int SharedCellCount(CellSet other) {
