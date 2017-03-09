@@ -79,19 +79,14 @@ class Client {
 			var cellSet = new CellSet(unknownSurrounding, cellInfo.surrounding,
 				originCell: cell);
 
-			this.addCellSet(cellSet, addToTurn: false);
+			this.addCellSet(cellSet);
 		}
 
 		return TurnState.Playing;
 	}
 
-	HashSet<CellSet> intersectingSets(CellSet cellSet) => new HashSet<CellSet>(
-		from cell in cellSet.Cells
-		from otherSet in cell.IncludedSets
-		select otherSet
-	);
-
-	void addCellSet(CellSet cellSet, bool addToTurn = true) {
+	void addCellSet(CellSet cellSet) {
+		Console.WriteLine(cellSet);
 		bool addSet = true;
 		int cellCount = cellSet.Cells.Count();
 
@@ -103,9 +98,7 @@ class Client {
 
 			foreach(var cell in cellSet.Cells) {
 				cell.State = CellState.Mine;
-
-				if(addToTurn)
-					this.toFlag.Add(cell);
+				this.toFlag.Add(cell);
 			}
 		}
 
@@ -114,13 +107,11 @@ class Client {
 
 			foreach(var cell in cellSet.Cells) {
 				cell.State = CellState.Empty;
-
-				if(addToTurn)
-					this.toClear.Add(cell);
+				this.toClear.Add(cell);
 			}
 		}
 
-		foreach(var otherSet in this.intersectingSets(cellSet)) {
+		foreach(var otherSet in cellSet.IntersectingSets) {
 			if(cellSet.SharedMineCount(otherSet) != null) {
 				foreach(var cell in otherSet.Cells) {
 					cell.IncludedSets.Remove(otherSet);
@@ -227,6 +218,12 @@ class CellSet {
 
 		return sharedCount - Math.Max(minSharedEmpty, 0);
 	}
+
+	public HashSet<CellSet> IntersectingSets => new HashSet<CellSet>(
+		from cell in this.Cells
+		from otherSet in cell.IncludedSets
+		select otherSet
+	);
 }
 
 class GameGrid {
@@ -260,13 +257,13 @@ class GameGrid {
 	public IEnumerable<Cell> SurroundingCells(Cell cell) {
 		foreach(var offset in RepeatProduct<int>(new[] { -1, 0, 1 },
 			cell.Coords.Length)) {
-			/* Skip origin coordinates */
+			/* Skip cell's coordinates */
 			if(offset.All(o => o == 0))
 				continue;
 
 			var surrCoords = cell.Coords.Zip(offset, (c, o) => c + o);
 
-			/* Check all coords are positive */
+			/* Check all coords are non-negative */
 			if(surrCoords.Any(s => s < 0))
 				continue;
 
