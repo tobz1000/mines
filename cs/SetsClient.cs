@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading.Tasks;
@@ -86,7 +87,6 @@ class Client {
 	}
 
 	void addCellSet(CellSet cellSet) {
-		Console.WriteLine(cellSet);
 		bool addSet = true;
 		int cellCount = cellSet.Cells.Count();
 
@@ -135,6 +135,12 @@ class Client {
 	void guessClear(Cell cell) {
 		this.addCellSet(new CellSet(cell, 0));
 	}
+
+	public IEnumerable<CellSet> AllCellSets => new HashSet<CellSet>(
+		from cell in this.Grid
+		from cellSet in cell.IncludedSets
+		select cellSet
+	);
 
 	public static void Main() {
 		// foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
@@ -226,7 +232,7 @@ class CellSet {
 	);
 }
 
-class GameGrid {
+class GameGrid : IEnumerable<Cell> {
 	Client client;
 	int[] dims;
 	Cell[] arr;
@@ -236,6 +242,11 @@ class GameGrid {
 		this.dims = dims;
 		this.arr = new Cell[dims.Aggregate((a, b) => a * b)];
 	}
+
+	public IEnumerator<Cell> GetEnumerator() =>
+		(from cell in this.arr where cell != null select cell).GetEnumerator();
+
+	IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
 	public Cell this[int[] coords] {
 		get {
