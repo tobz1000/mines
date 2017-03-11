@@ -22,6 +22,7 @@ class Client {
 	IMinesServer Server;
 	HashSet<Cell> toFlag;
 	HashSet<Cell> toClear;
+	Queue<CellSet> cellSetQueue;
 
 
 	protected virtual Cell getGuessCell() => null;
@@ -37,6 +38,7 @@ class Client {
 		this.Grid = new GameGrid(this, server.Status.Dims);
 		this.toFlag = new HashSet<Cell>();
 		this.toClear = new HashSet<Cell>();
+		this.cellSetQueue = new Queue<CellSet>();
 	}
 
 	void Play() {
@@ -52,6 +54,8 @@ class Client {
 	}
 
 	async Task<TurnState> Turn() {
+		this.flushCellSets();
+
 		if(!this.toClear.Any()) {
 			Cell guessCell = this.getGuessCell();
 
@@ -59,6 +63,7 @@ class Client {
 				return TurnState.GiveUp;
 
 			this.guessClear(guessCell);
+			this.flushCellSets();
 		}
 
 		var toClear = (from cell in this.toClear select cell.Coords).ToArray();
@@ -80,10 +85,16 @@ class Client {
 			var cellSet = new CellSet(unknownSurrounding, cellInfo.surrounding,
 				originCell: cell);
 
-			this.addCellSet(cellSet);
+			this.cellSetQueue.Enqueue(cellSet);
 		}
 
 		return TurnState.Playing;
+	}
+
+	void flushCellSets() {
+		while(this.cellSetQueue.Count() > 0) {
+			this.addCellSet(this.cellSetQueue.Dequeue());
+		}
 	}
 
 	void addCellSet(CellSet cellSet) {
@@ -117,9 +128,9 @@ class Client {
 					cell.IncludedSets.Remove(otherSet);
 				}
 
-				this.addCellSet(otherSet - cellSet);
-				this.addCellSet(cellSet - otherSet);
-				this.addCellSet(cellSet & otherSet);
+				this.cellSetQueue.Enqueue(otherSet - cellSet);
+				this.cellSetQueue.Enqueue(cellSet - otherSet);
+				this.cellSetQueue.Enqueue(cellSet & otherSet);
 
 				return;
 			}
@@ -133,7 +144,7 @@ class Client {
 	}
 
 	void guessClear(Cell cell) {
-		this.addCellSet(new CellSet(cell, 0));
+		this.cellSetQueue.Enqueue(new CellSet(cell, 0));
 	}
 
 	public IEnumerable<CellSet> AllCellSets => new HashSet<CellSet>(
@@ -144,11 +155,13 @@ class Client {
 
 	public static void Main() {
 		// foreach(var seed in new uint[] { 2043619729, 3064048551, 1929672436 }) {
-		foreach(var seed in new uint[] { 1929672436 }) {
+		foreach(var seed in new uint[20]) {
 			var server = JsonServerWrapper.NewGame(dims: new[] { 15, 15 },
-				mines: 50, seed: seed, autoclear: false).Result;
+				mines: 20, autoclear: false).Result;
 
-			new Client(server).Play();
+			try {
+				new Client(server).Play();
+			} catch {}
 		}
 	}
 }
