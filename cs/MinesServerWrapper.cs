@@ -15,42 +15,66 @@ class JsonServerWrapper : IMinesServer {
 	string client;
 	public ServerResponse Status { get; private set; }
 
-	public static async Task<JsonServerWrapper> JoinGame(string id,
-		string client) {
+	public static async Task<JsonServerWrapper> JoinGame(
+		string id,
+		string client
+	) {
 		var inst = new JsonServerWrapper { client = client };
 		await inst.Action(new StatusRequest { id = id });
 		return inst;
 	}
 
-	public static async Task<JsonServerWrapper> NewGame(int[] dims, int mines,
-		uint? seed = null, string client = null, bool? autoclear = null) {
+	public static async Task<JsonServerWrapper> NewGame(
+		int[] dims,
+		int mines,
+		uint? seed = null,
+		string client = null,
+		bool? autoclear = null
+	) {
 		var inst = new JsonServerWrapper { client = client };
-		await inst.Action(new NewGame { dims = dims, mines = mines,
-			client = client, seed = seed, autoclear = autoclear });
+		await inst.Action(new NewGame {
+			dims = dims,
+			mines = mines,
+			client = client,
+			seed = seed,
+			autoclear = autoclear
+		});
 		return inst;
 	}
 
-	public Task<ServerResponse> Turn(int[][] clear = null, int[][] flag = null,
-		int[][] unflag = null, string client = null) {
+	public Task<ServerResponse> Turn(
+		int[][] clear = null,
+		int[][] flag = null,
+		int[][] unflag = null,
+		string client = null
+	) {
 		if(clear == null && flag == null && unflag == null)
 			throw new ArgumentNullException();
 
 		this.client = client ?? this.client;
 
-		var req = new TurnRequest { id = this.Status.id, client = this.client,
-			clear = clear, flag = flag, unflag = unflag };
+		var req = new TurnRequest {
+			id = this.Status.id,
+			client = this.client,
+			clear = clear,
+			flag = flag,
+			unflag = unflag
+		};
 
 		return this.Action(req);
 	}
 
 	async Task<ServerResponse> Action(ServerRequest req) {
 		using(var client = new HttpClient()) {
-			var resp = await client.PostAsync(this.url + req.action,
-				new StringContent(JsonConvert.SerializeObject(req)));
+			var resp = await client.PostAsync(
+				this.url + req.action,
+				new StringContent(JsonConvert.SerializeObject(req))
+			);
 			var respStr = await resp.Content.ReadAsStringAsync();
 
 			this.Status = JsonConvert.DeserializeObject<ServerResponse>(
-				respStr);
+				respStr
+			);
 
 			return this.Status;
 		}
