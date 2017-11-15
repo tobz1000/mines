@@ -1,4 +1,6 @@
 /js/saves/
+/rs/target/
+/py/venv/
 
 # npm files
 node_modules
