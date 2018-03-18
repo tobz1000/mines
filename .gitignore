@@ -8,6 +8,9 @@ node_modules
 # bower files
 bower_components
 
+# webpack
+/js/dist/
+
 # pyvenv files
 __pycache__
 .Python
