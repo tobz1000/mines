@@ -1,12 +1,12 @@
 [submodule "py"]
 	path = py
-	url = ../mines-split/mines-py/
+	url = git@github.com:tobz1000/mines-py.git
 [submodule "cs"]
 	path = cs
-	url = ../mines-split/mines-cs/
+	url = git@github.com:tobz1000/mines-cs.git
 [submodule "js"]
 	path = js
-	url = ../mines-split/mines-js/
+	url = git@github.com:tobz1000/mines-js.git
 [submodule "rs"]
 	path = rs
-	url = ../mines-split/mines-rs/
+	url = git@github.com:tobz1000/mines-rs.git
