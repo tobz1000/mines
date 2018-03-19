@@ -1,0 +1,12 @@
+[submodule "py"]
+	path = py
+	url = ../mines-split/mines-py/
+[submodule "cs"]
+	path = cs
+	url = ../mines-split/mines-cs/
+[submodule "js"]
+	path = js
+	url = ../mines-split/mines-js/
+[submodule "rs"]
+	path = rs
+	url = ../mines-split/mines-rs/
